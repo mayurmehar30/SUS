@@ -38,5 +38,9 @@ Thumbs.db
 *.key
 .env
 
+# Migration data (contains sensitive DB data)
+scripts/sus_data_export.sql
+scripts/sus_migration.zip
+
 # Claude
 .claude/
