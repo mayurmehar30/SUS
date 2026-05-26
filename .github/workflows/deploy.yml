@@ -1,0 +1,147 @@
+name: Deploy SUS to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # allows manual trigger from GitHub UI
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # JOB 1: Build backend JAR
+  # ─────────────────────────────────────────────────────────────
+  build-backend:
+    name: Build Spring Boot JAR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'corretto'
+          cache: maven
+
+      - name: Build JAR
+        working-directory: backend
+        run: mvn clean package -DskipTests
+
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: backend/target/sus-backend-*.jar
+          retention-days: 1
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 2: Build Next.js frontend
+  # ─────────────────────────────────────────────────────────────
+  build-frontend:
+    name: Build Next.js Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Create production env file
+        working-directory: frontend
+        run: |
+          echo "NEXT_PUBLIC_API_URL=https://${{ secrets.EC2_HOST }}/api" > .env.production
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Package build output
+        working-directory: frontend
+        run: |
+          tar -czf ../frontend-build.tar.gz \
+            .next \
+            public \
+            package.json \
+            package-lock.json \
+            next.config.* \
+            node_modules
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend-build.tar.gz
+          retention-days: 1
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 3: Deploy both to EC2 (runs after both builds succeed)
+  # ─────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download backend JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          path: artifacts/backend
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: artifacts/frontend
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/sus-key.pem
+          chmod 600 ~/.ssh/sus-key.pem
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload backend JAR to EC2
+        run: |
+          scp -i ~/.ssh/sus-key.pem \
+            artifacts/backend/sus-backend-*.jar \
+            ec2-user@${{ secrets.EC2_HOST }}:/home/ec2-user/deployments/sus-backend-new.jar
+
+      - name: Upload frontend build to EC2
+        run: |
+          scp -i ~/.ssh/sus-key.pem \
+            artifacts/frontend/frontend-build.tar.gz \
+            ec2-user@${{ secrets.EC2_HOST }}:/home/ec2-user/deployments/frontend-build.tar.gz
+
+      - name: Upload deploy script
+        run: |
+          scp -i ~/.ssh/sus-key.pem \
+            scripts/deploy.sh \
+            ec2-user@${{ secrets.EC2_HOST }}:/home/ec2-user/deployments/deploy.sh
+
+      - name: Run deploy script on EC2
+        run: |
+          ssh -i ~/.ssh/sus-key.pem ec2-user@${{ secrets.EC2_HOST }} \
+            "chmod +x /home/ec2-user/deployments/deploy.sh && /home/ec2-user/deployments/deploy.sh"
+
+      - name: Notify success
+        if: success()
+        run: echo "✅ Deployment successful! App is live at https://${{ secrets.EC2_HOST }}"
+
+      - name: Notify failure
+        if: failure()
+        run: echo "❌ Deployment failed. Check EC2 logs: sudo journalctl -u sus-backend -n 50"

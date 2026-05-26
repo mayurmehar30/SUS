@@ -1,0 +1,2 @@
+ALTER TABLE orders
+    ADD COLUMN special_discount NUMERIC(12,2) NOT NULL DEFAULT 0.00;

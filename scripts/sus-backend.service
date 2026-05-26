@@ -1,0 +1,16 @@
+[Unit]
+Description=SUS Backend - Spring Boot
+After=network.target
+
+[Service]
+User=ec2-user
+WorkingDirectory=/home/ec2-user/app/backend
+ExecStart=/usr/bin/java -jar -Dspring.profiles.active=prod -Xmx400m /home/ec2-user/app/backend/sus-backend.jar
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sus-backend
+
+[Install]
+WantedBy=multi-user.target

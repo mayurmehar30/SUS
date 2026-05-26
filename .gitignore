@@ -1,0 +1,42 @@
+# Backend build
+backend/target/
+backend/.mvn/
+backend/*.iml
+backend/src/main/resources/application-prod.properties
+
+# Backend logs
+backend/logs/
+backend/*.log
+
+# Backend uploads (images live on server, not in git)
+backend/uploads/
+
+# Eclipse IDE
+backend/.classpath
+backend/.project
+backend/.settings/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/.env.production
+frontend/tsconfig.tsbuildinfo
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keys / secrets
+*.pem
+*.key
+.env
+
+# Claude
+.claude/
