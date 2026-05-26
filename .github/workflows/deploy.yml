@@ -52,7 +52,7 @@ jobs:
       - name: Create production env file
         working-directory: frontend
         run: |
-          echo "NEXT_PUBLIC_API_URL=https://${{ secrets.EC2_HOST }}/api" > .env.production
+          echo "NEXT_PUBLIC_API_URL=http://${{ secrets.EC2_HOST }}/api" > .env.production
 
       - name: Build
         working-directory: frontend
