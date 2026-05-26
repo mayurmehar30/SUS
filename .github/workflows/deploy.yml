@@ -63,7 +63,6 @@ jobs:
         run: |
           tar -czf ../frontend-build.tar.gz \
             .next \
-            public \
             package.json \
             package-lock.json \
             next.config.* \
