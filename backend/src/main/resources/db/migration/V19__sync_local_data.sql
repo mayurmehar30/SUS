@@ -11,9 +11,13 @@ TRUNCATE TABLE
   product_images,
   products,
   sub_categories,
+  categories,
   schools,
   vendors
 RESTART IDENTITY CASCADE;
+
+-- ─── Categories ───────────────────────────────────────────────────────────────
+INSERT INTO categories (name) VALUES ('Boys'), ('Girls'), ('Unisex'), ('Accessories');
 
 -- ─── Sub-categories (matching local: Topwear/Bottomwear + accessories) ────────
 INSERT INTO sub_categories (name, category_id) VALUES
