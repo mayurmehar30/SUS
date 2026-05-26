@@ -38,6 +38,7 @@ export default function LoginPage() {
       login(token, { id: 0, name, email, role });
       if (typeof window !== "undefined") {
         localStorage.setItem("sus_token", token);
+        document.cookie = `sus_token=${token}; path=/; max-age=86400; SameSite=Lax`;
       }
       toast.success("Welcome back, " + name);
       router.push("/dashboard");
