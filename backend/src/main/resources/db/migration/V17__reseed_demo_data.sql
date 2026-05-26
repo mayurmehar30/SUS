@@ -8,11 +8,15 @@ TRUNCATE TABLE
   class_student_counts,
   order_items,
   orders,
+  categories,
   product_variants,
   product_images,
   products,
   schools
 RESTART IDENTITY CASCADE;
+
+-- ─── Categories ───────────────────────────────────────────────────────────────
+INSERT INTO categories (name) VALUES ('Boys'), ('Girls'), ('Unisex'), ('Accessories');
 
 -- ─── Schools ──────────────────────────────────────────────────────────────────
 INSERT INTO schools (name, contact_person, mobile, email, address, school_code, active) VALUES
