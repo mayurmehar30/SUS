@@ -44,3 +44,5 @@ scripts/sus_migration.zip
 
 # Claude
 .claude/
+
+backend/scripts/
