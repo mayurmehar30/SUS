@@ -102,10 +102,16 @@ jobs:
           chmod 600 ~/.ssh/sus-key.pem
           ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
 
+      - name: Prepare EC2 directories
+        run: |
+          ssh -i ~/.ssh/sus-key.pem ec2-user@${{ secrets.EC2_HOST }} \
+            "mkdir -p /home/ec2-user/deployments /home/ec2-user/app/backend /home/ec2-user/app/frontend /home/ec2-user/backups"
+
       - name: Upload backend JAR to EC2
         run: |
+          JAR=$(ls artifacts/backend/sus-backend-*.jar | head -1)
           scp -i ~/.ssh/sus-key.pem \
-            artifacts/backend/sus-backend-*.jar \
+            "$JAR" \
             ec2-user@${{ secrets.EC2_HOST }}:/home/ec2-user/deployments/sus-backend-new.jar
 
       - name: Upload frontend build to EC2
