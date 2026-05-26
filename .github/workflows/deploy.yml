@@ -120,6 +120,14 @@ jobs:
             artifacts/frontend/frontend-build.tar.gz \
             ec2-user@${{ secrets.EC2_HOST }}:/home/ec2-user/deployments/frontend-build.tar.gz
 
+      - name: Upload seed images to EC2
+        run: |
+          ssh -i ~/.ssh/sus-key.pem ec2-user@${{ secrets.EC2_HOST }} \
+            "mkdir -p /home/ec2-user/app/backend/uploads"
+          scp -i ~/.ssh/sus-key.pem \
+            scripts/seed-images/* \
+            ec2-user@${{ secrets.EC2_HOST }}:/home/ec2-user/app/backend/uploads/
+
       - name: Upload deploy script
         run: |
           scp -i ~/.ssh/sus-key.pem \
