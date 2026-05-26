@@ -1,11 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8090/api",
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://3.7.177.41/api",
   },
   images: {
-    domains: ["localhost"],
+    domains: ["localhost", "3.7.177.41"],
   },
 };
-
 module.exports = nextConfig;
