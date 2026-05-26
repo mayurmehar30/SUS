@@ -191,4 +191,4 @@ INSERT INTO sub_categories (name, category_id) VALUES
 
 -- Default super admin: password = Admin@123 (BCrypt hash)
 INSERT INTO users (name, email, password, role)
-VALUES ('Super Admin','admin@sus.com','$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lLx2','SUPER_ADMIN');
+VALUES ('Super Admin','admin@sus.com','$2a$10$7awKl.R6APO0D49VMBWcCuzwMwZqAG11dHoizIw80BKKZ8pxL..Pi','SUPER_ADMIN');

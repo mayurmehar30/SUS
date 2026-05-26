@@ -4,9 +4,9 @@
 -- ─── Additional Users ────────────────────────────────────────────────────────
 -- password for all = Admin@123
 INSERT INTO users (name, email, password, role) VALUES
-  ('Ravi Sharma',    'ravi@sus.com',    '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lLx2', 'SALESMAN'),
-  ('Pooja Mehta',    'pooja@sus.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lLx2', 'SALESMAN'),
-  ('Suresh Kumar',   'suresh@sus.com',  '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lLx2', 'FACTORY_MANAGER');
+  ('Ravi Sharma',    'ravi@sus.com',    '$2a$10$7awKl.R6APO0D49VMBWcCuzwMwZqAG11dHoizIw80BKKZ8pxL..Pi', 'SALESMAN'),
+  ('Pooja Mehta',    'pooja@sus.com',   '$2a$10$7awKl.R6APO0D49VMBWcCuzwMwZqAG11dHoizIw80BKKZ8pxL..Pi', 'SALESMAN'),
+  ('Suresh Kumar',   'suresh@sus.com',  '$2a$10$7awKl.R6APO0D49VMBWcCuzwMwZqAG11dHoizIw80BKKZ8pxL..Pi', 'FACTORY_MANAGER');
 
 -- ─── Schools ─────────────────────────────────────────────────────────────────
 INSERT INTO schools (name, contact_person, mobile, email, address, school_code, active) VALUES
