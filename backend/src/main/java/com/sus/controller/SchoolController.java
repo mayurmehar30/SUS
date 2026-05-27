@@ -58,6 +58,12 @@ public class SchoolController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/{id}/orders")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','SALESMAN','FACTORY_MANAGER')")
+    public ResponseEntity<List<OrderSummaryDTO>> getSchoolOrders(@PathVariable Long id) {
+        return ResponseEntity.ok(orderService.getBySchoolId(id));
+    }
+
     @PostMapping("/{id}/generate-token")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','SALESMAN')")
     public ResponseEntity<Map<String, String>> generateToken(@PathVariable Long id) {

@@ -41,6 +41,12 @@ public class OrderService {
                 .stream().map(this::toSummaryDTO).collect(Collectors.toList());
     }
 
+    public List<OrderSummaryDTO> getBySchoolId(Long schoolId) {
+        return orderRepository.findBySchoolIdAndStatusNotInOrderByCreatedAtDesc(
+                        schoolId, List.of(OrderStatus.DRAFT))
+                .stream().map(this::toSummaryDTO).collect(Collectors.toList());
+    }
+
     public List<OrderSummaryDTO> getByStatus(String status) {
         return orderRepository.findByStatus(OrderStatus.valueOf(status))
                 .stream().map(this::toSummaryDTO).collect(Collectors.toList());

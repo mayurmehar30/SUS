@@ -38,7 +38,8 @@ function ClassNamesEditor({ value, onChange }: { value: string[]; onChange: (v: 
   );
 }
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Copy, Check, Pencil, Trash2, Link2, ToggleLeft, ToggleRight, ShoppingCart } from "lucide-react";
+import { Plus, Search, Check, Pencil, Link2, ToggleLeft, ToggleRight, ShoppingCart, Eye } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -79,6 +80,7 @@ type SchoolFormData = z.infer<typeof schoolSchema>;
 
 export default function SchoolsPage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSchool, setEditingSchool] = useState<School | null>(null);
@@ -214,7 +216,12 @@ export default function SchoolsPage() {
                   {schools?.map(school => (
                     <tr key={school.id} className="border-b last:border-0 hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <p className="font-medium text-gray-900">{school.name}</p>
+                        <button
+                          onClick={() => router.push(`/schools/${school.id}`)}
+                          className="font-medium text-gray-900 hover:text-indigo-700 hover:underline text-left"
+                        >
+                          {school.name}
+                        </button>
                         <p className="text-xs text-gray-400">{school.email}</p>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">{school.schoolCode}</td>
@@ -240,6 +247,9 @@ export default function SchoolsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="icon" title="View details" onClick={() => router.push(`/schools/${school.id}`)}>
+                            <Eye className="h-4 w-4 text-gray-500" />
+                          </Button>
                           <Button variant="ghost" size="icon" title="Place order" onClick={() => placeOrder(school.id)}>
                             <ShoppingCart className="h-4 w-4 text-indigo-500" />
                           </Button>
