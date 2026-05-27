@@ -177,13 +177,31 @@ export default function SchoolsPage() {
     return Promise.resolve();
   };
 
-  const generateLink = async (schoolId: number) => {
+  const toWhatsAppNumber = (raw: string) => {
+    const digits = raw.replace(/\D/g, "");
+    if (digits.length === 10) return `91${digits}`;
+    if (digits.length === 12 && digits.startsWith("91")) return digits;
+    return digits;
+  };
+
+  const generateLink = async (school: School) => {
     try {
-      const res = await api.post(`/schools/${schoolId}/generate-token`);
+      const res = await api.post(`/schools/${school.id}/generate-token`);
       const url = res.data.orderUrl;
-      await copyToClipboard(url);
-      setCopiedId(schoolId);
-      toast.success("Order link copied to clipboard!");
+      const mobile = school.mobile?.trim();
+      if (mobile) {
+        const waNumber = toWhatsAppNumber(mobile);
+        const message = encodeURIComponent(
+          `Hello, here is the uniform order link for ${school.name}:\n${url}`
+        );
+        window.open(`https://wa.me/${waNumber}?text=${message}`, "_blank");
+        setCopiedId(school.id);
+        toast.success("Opening WhatsApp with order link!");
+      } else {
+        await copyToClipboard(url);
+        setCopiedId(school.id);
+        toast.success("Order link copied to clipboard!");
+      }
       setTimeout(() => setCopiedId(null), 2000);
     } catch {
       toast.error("Failed to generate link");
@@ -265,8 +283,11 @@ export default function SchoolsPage() {
                           <Button variant="ghost" size="icon" title="Place order" onClick={() => placeOrder(school.id)}>
                             <ShoppingCart className="h-4 w-4 text-indigo-500" />
                           </Button>
-                          <Button variant="ghost" size="icon" title="Copy order link" onClick={() => generateLink(school.id)}>
-                            {copiedId === school.id ? <Check className="h-4 w-4 text-green-500" /> : <Link2 className="h-4 w-4" />}
+                          <Button variant="ghost" size="icon" title={school.mobile ? "Send on WhatsApp" : "Copy order link"} onClick={() => generateLink(school)}>
+                            {copiedId === school.id
+                              ? <Check className="h-4 w-4 text-green-500" />
+                              : <Link2 className={`h-4 w-4 ${school.mobile ? "text-green-600" : ""}`} />
+                            }
                           </Button>
                           <Button variant="ghost" size="icon" onClick={() => openEdit(school)}>
                             <Pencil className="h-4 w-4" />
