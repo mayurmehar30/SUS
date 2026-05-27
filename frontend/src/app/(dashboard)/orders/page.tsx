@@ -11,7 +11,7 @@ import { Order, OrderStatus } from "@/types";
 import { formatCurrency, formatDate, ORDER_STATUS_COLORS } from "@/lib/utils";
 import api from "@/lib/api";
 
-const STATUSES: OrderStatus[] = ["DRAFT","SUBMITTED","APPROVED","CUTTING","STITCHING","PACKING","DISPATCHED","DELIVERED","CANCELLED"];
+const STATUSES: OrderStatus[] = ["SUBMITTED","APPROVED","CUTTING","STITCHING","PACKING","DISPATCHED","DELIVERED","CANCELLED"];
 const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   SUBMITTED: "APPROVED",
   APPROVED: "CUTTING",

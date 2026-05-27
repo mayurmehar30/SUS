@@ -16,6 +16,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Optional<Order> findByOrderNumber(String orderNumber);
     List<Order> findBySchoolId(Long schoolId);
     List<Order> findByStatus(OrderStatus status);
+    List<Order> findByStatusNotOrderByCreatedAtDesc(OrderStatus status);
     List<Order> findBySchoolIdAndStatus(Long schoolId, OrderStatus status);
     List<Order> findBySchoolIdAndStatusNotInOrderByCreatedAtDesc(Long schoolId, List<OrderStatus> statuses);
     long countByStatus(OrderStatus status);

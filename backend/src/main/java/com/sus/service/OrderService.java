@@ -37,7 +37,8 @@ public class OrderService {
     private final OrderAdminEditRepository adminEditRepository;
 
     public List<OrderSummaryDTO> getAll() {
-        return orderRepository.findAll().stream().map(this::toSummaryDTO).collect(Collectors.toList());
+        return orderRepository.findByStatusNotOrderByCreatedAtDesc(OrderStatus.DRAFT)
+                .stream().map(this::toSummaryDTO).collect(Collectors.toList());
     }
 
     public List<OrderSummaryDTO> getByStatus(String status) {
