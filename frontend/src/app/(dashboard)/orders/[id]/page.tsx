@@ -71,21 +71,21 @@ function ImageLightbox({ images, initialIndex, productName, onClose }: {
   const next = useCallback(() => setIdx(i => (i + 1) % images.length), [images.length]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="relative bg-white rounded-xl shadow-2xl w-64 overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b">
-          <p className="font-semibold text-sm text-gray-800 truncate pr-4">{productName}</p>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-xs text-gray-400">{idx + 1} / {images.length}</span>
-            <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 transition-colors">
-              <X className="h-4 w-4 text-gray-500" />
+        <div className="flex items-center justify-between px-3 py-2 border-b">
+          <p className="text-xs font-semibold text-gray-800 truncate pr-2">{productName}</p>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {images.length > 1 && <span className="text-xs text-gray-400">{idx + 1}/{images.length}</span>}
+            <button onClick={onClose} className="p-0.5 rounded hover:bg-gray-100 transition-colors">
+              <X className="h-3.5 w-3.5 text-gray-500" />
             </button>
           </div>
         </div>
 
         {/* Main image */}
-        <div className="relative bg-gray-50 aspect-square">
+        <div className="relative bg-gray-50 h-56">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={images[idx]}
@@ -96,15 +96,15 @@ function ImageLightbox({ images, initialIndex, productName, onClose }: {
             <>
               <button
                 onClick={prev}
-                className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow flex items-center justify-center hover:bg-white transition-colors"
+                className="absolute left-1.5 top-1/2 -translate-y-1/2 w-6 h-6 bg-white/90 rounded-full shadow flex items-center justify-center hover:bg-white transition-colors"
               >
-                <ChevronLeft className="h-4 w-4 text-gray-700" />
+                <ChevronLeft className="h-3.5 w-3.5 text-gray-700" />
               </button>
               <button
                 onClick={next}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow flex items-center justify-center hover:bg-white transition-colors"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 bg-white/90 rounded-full shadow flex items-center justify-center hover:bg-white transition-colors"
               >
-                <ChevronRight className="h-4 w-4 text-gray-700" />
+                <ChevronRight className="h-3.5 w-3.5 text-gray-700" />
               </button>
             </>
           )}
@@ -112,12 +112,12 @@ function ImageLightbox({ images, initialIndex, productName, onClose }: {
 
         {/* Thumbnail strip */}
         {images.length > 1 && (
-          <div className="flex gap-1.5 p-3 overflow-x-auto">
+          <div className="flex gap-1 p-2 overflow-x-auto">
             {images.map((src, i) => (
               <button
                 key={i}
                 onClick={() => setIdx(i)}
-                className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-colors ${
+                className={`flex-shrink-0 w-10 h-10 rounded overflow-hidden border-2 transition-colors ${
                   i === idx ? "border-indigo-500" : "border-transparent hover:border-gray-300"
                 }`}
               >
