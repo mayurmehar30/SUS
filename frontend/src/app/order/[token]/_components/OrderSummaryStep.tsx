@@ -13,13 +13,13 @@ function imgSrc(url: string | null | undefined): string | null {
 function ProductChip({ url, name, gender }: { url: string | null | undefined; name: string; gender: "boys" | "girls" }) {
   const src = imgSrc(url);
   const accent = gender === "boys"
-    ? "border-blue-100 bg-blue-50/60"
-    : "border-pink-100 bg-pink-50/60";
+    ? "border-blue-100 bg-blue-50/60 hover:border-blue-300"
+    : "border-pink-100 bg-pink-50/60 hover:border-pink-300";
   const initAccent = gender === "boys"
     ? "bg-blue-100 text-blue-600"
     : "bg-pink-100 text-pink-600";
   return (
-    <div className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border ${accent}`}>
+    <div className={`relative group flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-colors cursor-default ${accent}`}>
       {src ? (
         <img
           src={src}
@@ -33,6 +33,22 @@ function ProductChip({ url, name, gender }: { url: string | null | undefined; na
         </div>
       )}
       <span className="text-xs font-semibold text-gray-700 leading-tight line-clamp-2">{name}</span>
+
+      {/* Hover image preview */}
+      {src && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-1.5 overflow-hidden">
+            <img
+              src={src}
+              alt={name}
+              className="w-44 h-44 object-cover rounded-xl"
+            />
+            <p className="text-xs font-semibold text-gray-700 text-center mt-1.5 mb-0.5 px-1 truncate max-w-[11rem]">{name}</p>
+          </div>
+          {/* Arrow */}
+          <div className="w-3 h-3 bg-white border-b border-r border-gray-100 rotate-45 mx-auto -mt-1.5 shadow-sm" />
+        </div>
+      )}
     </div>
   );
 }
