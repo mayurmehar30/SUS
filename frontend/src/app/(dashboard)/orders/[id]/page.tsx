@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Pencil, X, Save, History, ChevronRight } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Pencil, X, Save, History, ChevronRight, Images, ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,6 +57,79 @@ function classSummaryFromHistory(countsJson: string): ClassSummaryRow[] {
     girls: c.girlsCount,
     total: c.boysCount + c.girlsCount,
   }));
+}
+
+// ── Image lightbox ────────────────────────────────────────────────────────────
+function ImageLightbox({ images, initialIndex, productName, onClose }: {
+  images: string[];
+  initialIndex: number;
+  productName: string;
+  onClose: () => void;
+}) {
+  const [idx, setIdx] = useState(initialIndex);
+  const prev = useCallback(() => setIdx(i => (i - 1 + images.length) % images.length), [images.length]);
+  const next = useCallback(() => setIdx(i => (i + 1) % images.length), [images.length]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={onClose}>
+      <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <p className="font-semibold text-sm text-gray-800 truncate pr-4">{productName}</p>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="text-xs text-gray-400">{idx + 1} / {images.length}</span>
+            <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 transition-colors">
+              <X className="h-4 w-4 text-gray-500" />
+            </button>
+          </div>
+        </div>
+
+        {/* Main image */}
+        <div className="relative bg-gray-50 aspect-square">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={images[idx]}
+            alt={`${productName} ${idx + 1}`}
+            className="w-full h-full object-contain"
+          />
+          {images.length > 1 && (
+            <>
+              <button
+                onClick={prev}
+                className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow flex items-center justify-center hover:bg-white transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4 text-gray-700" />
+              </button>
+              <button
+                onClick={next}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow flex items-center justify-center hover:bg-white transition-colors"
+              >
+                <ChevronRight className="h-4 w-4 text-gray-700" />
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Thumbnail strip */}
+        {images.length > 1 && (
+          <div className="flex gap-1.5 p-3 overflow-x-auto">
+            {images.map((src, i) => (
+              <button
+                key={i}
+                onClick={() => setIdx(i)}
+                className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-colors ${
+                  i === idx ? "border-indigo-500" : "border-transparent hover:border-gray-300"
+                }`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={src} alt="" className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ── Count history types & modal ───────────────────────────────────────────────
@@ -210,6 +283,7 @@ export default function OrderDetailPage() {
   const [editState, setEditState] = useState<EditState | null>(null);
   const [changingProductIdx, setChangingProductIdx] = useState<number | null>(null);
   const [selectedHistory, setSelectedHistory] = useState<HistoryItem | null>(null);
+  const [lightbox, setLightbox] = useState<{ images: string[]; idx: number; name: string } | null>(null);
 
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: ["order", id],
@@ -522,51 +596,72 @@ export default function OrderDetailPage() {
                       </div>
 
                       <div className="pl-8 space-y-2">
-                        {/* Boys */}
-                        {group.boys.length > 0 && (
-                          <div className="rounded-lg border border-blue-100 overflow-hidden">
-                            <div className="px-4 py-2 bg-blue-50">
-                              <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Boys</span>
-                            </div>
-                            <div className="divide-y divide-gray-50">
-                              {group.boys.map(item => (
-                                <div key={item.id} className="flex items-center justify-between px-4 py-2.5">
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-gray-800 truncate">{item.productName}</p>
-                                    {item.productSku && <p className="text-xs text-gray-400 font-mono">{item.productSku}</p>}
-                                  </div>
-                                  <div className="text-right flex-shrink-0 ml-3">
-                                    <p className="text-sm font-semibold text-gray-900">{formatCurrency(item.unitPrice)}</p>
-                                    <p className="text-xs text-gray-400">per student</p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                        {(["boys", "girls"] as const).map(gender => {
+                          const items = group[gender];
+                          if (items.length === 0) return null;
+                          const isBoys = gender === "boys";
+                          return (
+                            <div key={gender} className={`rounded-lg border overflow-hidden ${isBoys ? "border-blue-100" : "border-pink-100"}`}>
+                              <div className={`px-4 py-2 ${isBoys ? "bg-blue-50" : "bg-pink-50"}`}>
+                                <span className={`text-xs font-semibold uppercase tracking-wide ${isBoys ? "text-blue-700" : "text-pink-700"}`}>
+                                  {isBoys ? "Boys" : "Girls"}
+                                </span>
+                              </div>
+                              <div className="divide-y divide-gray-50">
+                                {items.map(item => {
+                                  const imgs = item.productImages ?? (item.productImageUrl ? [item.productImageUrl] : []);
+                                  return (
+                                    <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 group/row">
+                                      {/* Thumbnail */}
+                                      <div className="relative flex-shrink-0">
+                                        {imgs.length > 0 ? (
+                                          <button
+                                            onClick={() => setLightbox({ images: imgs, idx: 0, name: item.productName })}
+                                            className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 hover:border-indigo-400 transition-colors block relative"
+                                          >
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img src={imgs[0]} alt={item.productName} className="w-full h-full object-cover" />
+                                            {imgs.length > 1 && (
+                                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity rounded-lg">
+                                                <span className="text-white text-xs font-bold flex items-center gap-0.5">
+                                                  <Images className="h-3 w-3" />{imgs.length}
+                                                </span>
+                                              </div>
+                                            )}
+                                          </button>
+                                        ) : (
+                                          <div className="w-12 h-12 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
+                                            <Images className="h-4 w-4 text-gray-300" />
+                                          </div>
+                                        )}
+                                      </div>
 
-                        {/* Girls */}
-                        {group.girls.length > 0 && (
-                          <div className="rounded-lg border border-pink-100 overflow-hidden">
-                            <div className="px-4 py-2 bg-pink-50">
-                              <span className="text-xs font-semibold text-pink-700 uppercase tracking-wide">Girls</span>
+                                      {/* Name + SKU */}
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-medium text-gray-800 truncate">{item.productName}</p>
+                                        {item.productSku && <p className="text-xs text-gray-400 font-mono">{item.productSku}</p>}
+                                        {imgs.length > 1 && (
+                                          <button
+                                            onClick={() => setLightbox({ images: imgs, idx: 0, name: item.productName })}
+                                            className="text-xs text-indigo-500 hover:text-indigo-700 mt-0.5"
+                                          >
+                                            View {imgs.length} photos
+                                          </button>
+                                        )}
+                                      </div>
+
+                                      {/* Price */}
+                                      <div className="text-right flex-shrink-0">
+                                        <p className="text-sm font-semibold text-gray-900">{formatCurrency(item.unitPrice)}</p>
+                                        <p className="text-xs text-gray-400">per student</p>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
-                            <div className="divide-y divide-gray-50">
-                              {group.girls.map(item => (
-                                <div key={item.id} className="flex items-center justify-between px-4 py-2.5">
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-gray-800 truncate">{item.productName}</p>
-                                    {item.productSku && <p className="text-xs text-gray-400 font-mono">{item.productSku}</p>}
-                                  </div>
-                                  <div className="text-right flex-shrink-0 ml-3">
-                                    <p className="text-sm font-semibold text-gray-900">{formatCurrency(item.unitPrice)}</p>
-                                    <p className="text-xs text-gray-400">per student</p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                          );
+                        })}
                       </div>
 
                       {idx < groups.length - 1 && <div className="mt-5 border-t border-dashed border-gray-100" />}
@@ -860,6 +955,14 @@ export default function OrderDetailPage() {
       </div>
       {selectedHistory && (
         <CountHistoryModal item={selectedHistory} onClose={() => setSelectedHistory(null)} />
+      )}
+      {lightbox && (
+        <ImageLightbox
+          images={lightbox.images}
+          initialIndex={lightbox.idx}
+          productName={lightbox.name}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </DashboardLayout>
   );

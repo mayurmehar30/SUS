@@ -94,6 +94,7 @@ export interface OrderItem {
   productName: string;
   productSku: string;
   productImageUrl?: string;
+  productImages?: string[];
   productVariantId?: number;
   categoryId?: number;
   categoryName?: string;

@@ -162,11 +162,26 @@ export default function SchoolsPage() {
     else createMutation.mutate(data);
   };
 
+  const copyToClipboard = (text: string) => {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    }
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.style.position = "fixed";
+    el.style.opacity = "0";
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+    return Promise.resolve();
+  };
+
   const generateLink = async (schoolId: number) => {
     try {
       const res = await api.post(`/schools/${schoolId}/generate-token`);
       const url = res.data.orderUrl;
-      navigator.clipboard.writeText(url);
+      await copyToClipboard(url);
       setCopiedId(schoolId);
       toast.success("Order link copied to clipboard!");
       setTimeout(() => setCopiedId(null), 2000);

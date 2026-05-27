@@ -18,6 +18,7 @@ public class OrderItemDTO {
     private String productName;
     private String productSku;
     private String productImageUrl;
+    private List<String> productImages;
     private Long productVariantId;
     private Long categoryId;
     private String categoryName;

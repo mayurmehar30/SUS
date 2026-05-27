@@ -185,6 +185,9 @@ public class OrderService {
         List<OrderItemDTO> itemDTOs = o.getItems().stream().map(item -> {
             String imgUrl = item.getProduct().getImages().isEmpty() ? null
                     : item.getProduct().getImages().get(0).getImageUrl();
+            List<String> allImages = item.getProduct().getImages().stream()
+                    .map(img -> img.getImageUrl())
+                    .collect(Collectors.toList());
             List<ClassStudentCountDTO> cscs = item.getClassStudentCounts().stream()
                     .map(c -> ClassStudentCountDTO.builder()
                             .id(c.getId()).className(c.getClassName())
@@ -202,6 +205,7 @@ public class OrderService {
                     .productName(item.getProduct().getName())
                     .productSku(item.getProduct().getSku())
                     .productImageUrl(imgUrl)
+                    .productImages(allImages)
                     .categoryId(catId)
                     .categoryName(catName)
                     .subCategoryId(subCatId)
