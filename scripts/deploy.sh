@@ -104,6 +104,11 @@ if [ "$FRONTEND_OK" = false ]; then
     fail "Frontend did not start."
 fi
 
+log "Fixing upload directory permissions for nginx..."
+chmod o+x /home/ec2-user /home/ec2-user/app /home/ec2-user/app/backend
+chmod -R o+r "$BACKEND_LIVE/uploads/" 2>/dev/null || true
+find "$BACKEND_LIVE/uploads/" -type d -exec chmod o+x {} \; 2>/dev/null || true
+
 log "Cleaning up..."
 rm -f "$DEPLOY_DIR/sus-backend-new.jar"
 rm -f "$DEPLOY_DIR/frontend-build.tar.gz"
