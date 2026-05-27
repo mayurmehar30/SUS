@@ -48,18 +48,14 @@ function parseUniformGroups(items: OrderItem[]): UniformGroup[] {
 
 interface ClassSummaryRow { className: string; boys: number; girls: number; total: number; }
 
-function deriveClassSummary(items: OrderItem[]): ClassSummaryRow[] {
-  const map = new Map<string, { boys: number; girls: number }>();
-  for (const item of items) {
-    for (const c of item.classStudentCounts ?? []) {
-      if (!map.has(c.className)) map.set(c.className, { boys: 0, girls: 0 });
-      const entry = map.get(c.className)!;
-      if (c.boysCount > entry.boys) entry.boys = c.boysCount;
-      if (c.girlsCount > entry.girls) entry.girls = c.girlsCount;
-    }
-  }
-  return Array.from(map.entries()).map(([className, { boys, girls }]) => ({
-    className, boys, girls, total: boys + girls,
+function classSummaryFromHistory(countsJson: string): ClassSummaryRow[] {
+  const counts: Array<{ className: string; boysCount: number; girlsCount: number }> =
+    JSON.parse(countsJson);
+  return counts.map(c => ({
+    className: c.className,
+    boys: c.boysCount,
+    girls: c.girlsCount,
+    total: c.boysCount + c.girlsCount,
   }));
 }
 
@@ -581,9 +577,11 @@ export default function OrderDetailPage() {
             );
           })()}
 
-          {/* Class-wise summary — view mode only */}
+          {/* Class-wise summary — view mode only, sourced from latest count history */}
           {!editMode && (() => {
-            const summary = deriveClassSummary(order.items ?? []);
+            const summary = countHistory.length > 0
+              ? classSummaryFromHistory(countHistory[0].countsJson)
+              : [];
             if (summary.length === 0) return null;
             const totalBoys = summary.reduce((s, r) => s + r.boys, 0);
             const totalGirls = summary.reduce((s, r) => s + r.girls, 0);
