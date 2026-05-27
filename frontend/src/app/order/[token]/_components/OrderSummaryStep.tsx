@@ -146,7 +146,6 @@ export default function OrderSummaryStep({
 }: OrderSummaryStepProps) {
   const withProducts = uniforms.filter(hasAnyProduct);
   const grandTotal = withProducts.reduce((s, u) => s + getUniformEstimate(u, classRows), 0);
-  const totalStudents = withProducts.reduce((s, u) => s + getUniformTotalQty(u, classRows), 0);
 
   return (
     <div className="space-y-5">
@@ -160,54 +159,83 @@ export default function OrderSummaryStep({
         {withProducts.map(u => <UniformSummaryRow key={u.id} uniform={u} classRows={classRows} />)}
       </div>
 
-      {/* Student count summary */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-          <FileText className="h-4 w-4 text-indigo-600" />
-          <h3 className="font-semibold text-gray-800 text-sm">Student Count Summary</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="text-left px-5 py-2.5 font-medium text-gray-500">Uniform</th>
-                <th className="text-center px-3 py-2.5 font-medium text-blue-500">Boys</th>
-                <th className="text-center px-3 py-2.5 font-medium text-pink-500">Girls</th>
-                <th className="text-center px-3 py-2.5 font-medium text-gray-500">Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {withProducts.map(u => {
-                const boys = classRows.reduce((s, r) => s + r.boysCount, 0);
-                const girls = classRows.reduce((s, r) => s + r.girlsCount, 0);
-                return (
-                  <tr key={u.id}>
-                    <td className="px-5 py-2.5 font-medium text-gray-700 max-w-[160px]">
-                      <div className="truncate">{u.name}</div>
-                      <div className="text-gray-400 font-normal">{u.uniformType}</div>
-                    </td>
-                    <td className="px-3 py-2.5 text-center font-bold text-blue-600 text-base">{boys}</td>
-                    <td className="px-3 py-2.5 text-center font-bold text-pink-600 text-base">{girls}</td>
-                    <td className="px-3 py-2.5 text-center font-bold text-indigo-700 text-base">{boys + girls}</td>
+      {/* Student count summary — class-wise */}
+      {classRows.length > 0 && (() => {
+        const totalBoys  = classRows.reduce((s, r) => s + r.boysCount, 0);
+        const totalGirls = classRows.reduce((s, r) => s + r.girlsCount, 0);
+        const showBoys  = totalBoys > 0;
+        const showGirls = totalGirls > 0;
+        return (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+              <FileText className="h-4 w-4 text-indigo-600" />
+              <h3 className="font-semibold text-gray-800 text-sm">Student Count Summary</h3>
+              <span className="ml-auto text-xs text-gray-400 font-medium">{totalBoys + totalGirls} total students</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gradient-to-r from-indigo-50 to-slate-50 border-b border-gray-100">
+                    <th className="text-left px-5 py-2.5 font-medium text-gray-500">Class</th>
+                    {showBoys && (
+                      <th className="text-center px-3 py-2.5 font-medium text-blue-500">
+                        <span className="flex items-center justify-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" /> Boys
+                        </span>
+                      </th>
+                    )}
+                    {showGirls && (
+                      <th className="text-center px-3 py-2.5 font-medium text-pink-500">
+                        <span className="flex items-center justify-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-pink-400 inline-block" /> Girls
+                        </span>
+                      </th>
+                    )}
+                    <th className="text-center px-3 py-2.5 font-medium text-gray-500">Total</th>
                   </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="bg-indigo-50 border-t-2 border-indigo-100 font-bold">
-                <td className="px-5 py-2.5 text-gray-700">Grand Total</td>
-                <td className="px-3 py-2.5 text-center text-blue-600 text-base">
-                  {classRows.reduce((s, r) => s + r.boysCount, 0)}
-                </td>
-                <td className="px-3 py-2.5 text-center text-pink-600 text-base">
-                  {classRows.reduce((s, r) => s + r.girlsCount, 0)}
-                </td>
-                <td className="px-3 py-2.5 text-center text-indigo-700 text-base">{totalStudents}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {classRows.map(row => {
+                    const rowTotal = row.boysCount + row.girlsCount;
+                    return (
+                      <tr key={row.className} className="hover:bg-gray-50/50">
+                        <td className="px-5 py-2.5 font-medium text-gray-700">{row.className}</td>
+                        {showBoys && (
+                          <td className="px-3 py-2.5 text-center">
+                            {row.boysCount > 0
+                              ? <span className="font-semibold text-blue-600">{row.boysCount}</span>
+                              : <span className="text-gray-300">—</span>}
+                          </td>
+                        )}
+                        {showGirls && (
+                          <td className="px-3 py-2.5 text-center">
+                            {row.girlsCount > 0
+                              ? <span className="font-semibold text-pink-600">{row.girlsCount}</span>
+                              : <span className="text-gray-300">—</span>}
+                          </td>
+                        )}
+                        <td className="px-3 py-2.5 text-center">
+                          {rowTotal > 0
+                            ? <span className="font-bold text-indigo-700">{rowTotal}</span>
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-indigo-50 border-t-2 border-indigo-100">
+                    <td className="px-5 py-2.5 font-bold text-gray-700">Total</td>
+                    {showBoys && <td className="px-3 py-2.5 text-center font-bold text-blue-600">{totalBoys}</td>}
+                    {showGirls && <td className="px-3 py-2.5 text-center font-bold text-pink-600">{totalGirls}</td>}
+                    <td className="px-3 py-2.5 text-center font-bold text-indigo-700">{totalBoys + totalGirls}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Payment summary */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
