@@ -186,9 +186,6 @@ export default function LoginPage() {
 
           </form>
 
-          <p className="text-xs text-center text-gray-400 mt-6">
-            Default credentials: <span className="font-medium text-gray-500">admin@sus.com</span> / <span className="font-medium text-gray-500">Admin@123</span>
-          </p>
         </div>
       </div>
     </div>
