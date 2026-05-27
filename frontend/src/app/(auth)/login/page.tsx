@@ -110,14 +110,11 @@ export default function LoginPage() {
           <div className="flex items-center justify-center w-14 h-14 bg-indigo-600 rounded-2xl mb-3 shadow-lg shadow-indigo-200">
             <ShirtIcon className="h-7 w-7 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-gray-900">School Uniform System</h1>
-          <p className="text-gray-400 text-xs mt-1">Uniform Management & Order Portal</p>
         </div>
 
         <div className="w-full max-w-sm">
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900">Welcome back</h2>
-            <p className="text-gray-500 text-sm mt-1">Sign in to your admin account</p>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
