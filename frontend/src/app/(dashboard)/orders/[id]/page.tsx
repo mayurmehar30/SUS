@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Pencil, X, Save, History } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Pencil, X, Save, History, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,82 @@ import { Order, OrderStatus, Product } from "@/types";
 import { formatCurrency, formatDateTime, ORDER_STATUS_COLORS } from "@/lib/utils";
 import api from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
+
+// ── Count history types & modal ───────────────────────────────────────────────
+interface CountEntry { className: string; boysCount: number; girlsCount: number; }
+interface HistoryItem { id: number; savedAt: string; countsJson: string; }
+
+function CountHistoryModal({ item, onClose }: { item: HistoryItem; onClose: () => void }) {
+  const counts: CountEntry[] = JSON.parse(item.countsJson);
+  const boys  = counts.reduce((s, c) => s + c.boysCount, 0);
+  const girls = counts.reduce((s, c) => s + c.girlsCount, 0);
+  const date  = new Date(item.savedAt);
+  const dateStr = date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const timeStr = date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+        <div className="px-5 py-4 bg-indigo-600 text-white flex items-start justify-between gap-3 flex-shrink-0">
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <History className="h-4 w-4 text-indigo-200" />
+              <span className="font-semibold text-sm">Count Snapshot</span>
+            </div>
+            <p className="text-indigo-200 text-xs">{dateStr} · {timeStr}</p>
+          </div>
+          <div className="text-right flex-shrink-0">
+            <p className="font-bold text-base">{boys + girls} students</p>
+            <p className="text-indigo-200 text-xs">{boys} boys · {girls} girls</p>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-indigo-500 rounded-lg transition-colors flex-shrink-0">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="overflow-y-auto flex-1">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th className="text-left px-5 py-2.5 font-medium text-gray-500 text-xs">Class</th>
+                <th className="text-center px-3 py-2.5 font-medium text-blue-500 text-xs">Boys</th>
+                <th className="text-center px-3 py-2.5 font-medium text-pink-500 text-xs">Girls</th>
+                <th className="text-center px-3 py-2.5 font-medium text-gray-500 text-xs">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {counts.map(c => {
+                const total = c.boysCount + c.girlsCount;
+                return (
+                  <tr key={c.className} className="hover:bg-gray-50/50">
+                    <td className="px-5 py-2.5 font-medium text-gray-700 text-xs">{c.className}</td>
+                    <td className="px-3 py-2.5 text-center font-semibold text-blue-600 text-sm">
+                      {c.boysCount > 0 ? c.boysCount : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-semibold text-pink-600 text-sm">
+                      {c.girlsCount > 0 ? c.girlsCount : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-bold text-indigo-700 text-sm">
+                      {total > 0 ? total : <span className="text-gray-300">—</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="bg-indigo-50 border-t-2 border-indigo-100">
+                <td className="px-5 py-2.5 font-bold text-xs text-gray-700">Total</td>
+                <td className="px-3 py-2.5 text-center font-bold text-sm text-blue-600">{boys || "—"}</td>
+                <td className="px-3 py-2.5 text-center font-bold text-sm text-pink-600">{girls || "—"}</td>
+                <td className="px-3 py-2.5 text-center font-bold text-sm text-indigo-700">{boys + girls || "—"}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const WORKFLOW: OrderStatus[] = ["SUBMITTED","APPROVED","CUTTING","STITCHING","PACKING","DISPATCHED","DELIVERED"];
 const PAYMENT_STATUSES = ["PENDING", "PARTIAL", "PAID"] as const;
@@ -90,10 +166,17 @@ export default function OrderDetailPage() {
   const [editMode, setEditMode] = useState(false);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [changingProductIdx, setChangingProductIdx] = useState<number | null>(null);
+  const [selectedHistory, setSelectedHistory] = useState<HistoryItem | null>(null);
 
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: ["order", id],
     queryFn: () => api.get(`/orders/${id}`).then(r => r.data),
+  });
+
+  const { data: countHistory = [] } = useQuery<HistoryItem[]>({
+    queryKey: ["count-history-admin", id],
+    queryFn: () => api.get(`/orders/public/${order!.orderToken}/count-history`).then(r => r.data),
+    enabled: !!order?.orderToken,
   });
 
   const statusMutation = useMutation({
@@ -431,6 +514,48 @@ export default function OrderDetailPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Student count history */}
+          {countHistory.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <History className="h-4 w-4 text-indigo-500" /> Student Count History
+                  <span className="ml-auto text-xs font-normal text-gray-400">{countHistory.length} save{countHistory.length !== 1 ? "s" : ""}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y divide-gray-50">
+                  {countHistory.map(h => {
+                    const counts: CountEntry[] = JSON.parse(h.countsJson);
+                    const boys  = counts.reduce((s, c) => s + c.boysCount, 0);
+                    const girls = counts.reduce((s, c) => s + c.girlsCount, 0);
+                    const date  = new Date(h.savedAt);
+                    const dateStr = date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+                    const timeStr = date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+                    return (
+                      <button
+                        key={h.id}
+                        onClick={() => setSelectedHistory(h)}
+                        className="w-full px-5 py-3 flex items-center justify-between hover:bg-indigo-50/50 transition-colors text-left group"
+                      >
+                        <div>
+                          <p className="text-xs font-semibold text-gray-700 group-hover:text-indigo-700 transition-colors">
+                            {dateStr} · {timeStr}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">{boys} boys · {girls} girls</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-sm font-bold text-indigo-600">{boys + girls} students</span>
+                          <ChevronRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-indigo-400 transition-colors" />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Right column */}
@@ -579,6 +704,9 @@ export default function OrderDetailPage() {
           </Card>
         </div>
       </div>
+      {selectedHistory && (
+        <CountHistoryModal item={selectedHistory} onClose={() => setSelectedHistory(null)} />
+      )}
     </DashboardLayout>
   );
 }
