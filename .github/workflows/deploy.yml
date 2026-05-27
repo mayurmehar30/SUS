@@ -109,9 +109,14 @@ jobs:
 
       - name: Upload backend JAR to EC2
         run: |
-          JAR=$(ls artifacts/backend/sus-backend-*.jar | head -1)
-          scp -i ~/.ssh/sus-key.pem \
-            "$JAR" \
+          JAR=$(find artifacts/backend -name "sus-backend-*.jar" -type f | head -1)
+          if [ -z "$JAR" ]; then
+            echo "::error::No JAR found in artifacts/backend/"
+            ls -la artifacts/backend/ || true
+            exit 1
+          fi
+          echo "Uploading $JAR"
+          scp -i ~/.ssh/sus-key.pem "$JAR" \
             ec2-user@${{ secrets.EC2_HOST }}:/home/ec2-user/deployments/sus-backend-new.jar
 
       - name: Upload frontend build to EC2
