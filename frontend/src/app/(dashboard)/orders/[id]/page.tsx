@@ -196,6 +196,13 @@ function CountHistoryModal({ item, onClose }: { item: HistoryItem; onClose: () =
   );
 }
 
+function productType(categoryName?: string): "topwear" | "bottomwear" | "accessory" {
+  const c = (categoryName ?? "").toLowerCase();
+  if (c.includes("top")) return "topwear";
+  if (c.includes("bottom")) return "bottomwear";
+  return "accessory";
+}
+
 const WORKFLOW: OrderStatus[] = ["SUBMITTED","APPROVED","CUTTING","STITCHING","PACKING","DISPATCHED","DELIVERED"];
 const PAYMENT_STATUSES = ["PENDING", "PARTIAL", "PAID"] as const;
 
@@ -301,9 +308,10 @@ export default function OrderDetailPage() {
     return next;
   });
 
-  // Add item form
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [addItemForm, setAddItemForm] = useState({ productId: 0, productName: "", productImages: [] as string[], unitPrice: "", notes: "", totalQuantity: "0" });
+  // Inline add-to-section state
+  type AddingToSection = { groupName: string; gender: "boys" | "girls"; itemType: "topwear" | "bottomwear" | "accessory" };
+  const [addingToSection, setAddingToSection] = useState<AddingToSection | null>(null);
+  const [addSectionForm, setAddSectionForm] = useState({ productId: 0, productName: "", productImages: [] as string[], unitPrice: "", totalQuantity: "1" });
 
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: ["order", id],
@@ -375,7 +383,7 @@ export default function OrderDetailPage() {
     setEditMode(false);
     setEditState(null);
     setChangingProductIdx(null);
-    setShowAddForm(false);
+    setAddingToSection(null);
     setCollapsedGroups(new Set());
   }
 
@@ -501,28 +509,6 @@ export default function OrderDetailPage() {
           {editMode && editState && (() => {
             const groups = parseUniformGroups(order.items ?? []);
 
-            const updateGroupCount = (
-              groupItems: OrderItem[],
-              countIdx: number,
-              field: "boysCount" | "girlsCount",
-              value: number,
-            ) => {
-              setEditState(prev => {
-                if (!prev) return prev;
-                const items = [...prev.items];
-                for (const gi of groupItems) {
-                  const idx = order.items.findIndex(i => i.id === gi.id);
-                  if (idx < 0) continue;
-                  const counts = [...items[idx].classStudentCounts];
-                  counts[countIdx] = { ...counts[countIdx], [field]: value };
-                  items[idx] = { ...items[idx], classStudentCounts: counts };
-                }
-                return { ...prev, items };
-              });
-            };
-
-            const notesSuggestions = Array.from(new Set((order.items ?? []).map(i => i.notes).filter(Boolean)));
-
             return (
               <Card>
                 <CardHeader><CardTitle>Order Items</CardTitle></CardHeader>
@@ -548,11 +534,45 @@ export default function OrderDetailPage() {
                       <div className="pl-8 space-y-3">
                         {(["boys", "girls"] as const).map(gender => {
                           const genderItems = group[gender].filter(i => !editState.removedItemIds.includes(i.id));
-                          if (genderItems.length === 0) return null;
                           const isBoys = gender === "boys";
-                          const countField = isBoys ? "boysCount" : "girlsCount";
-                          const firstFlatIdx = order.items.findIndex(i => i.id === genderItems[0].id);
-                          const sharedCounts = editState.items[firstFlatIdx]?.classStudentCounts ?? [];
+                          const sectionNotes = `${group.name} - ${isBoys ? "Boys" : "Girls"}`;
+                          const sectionNewItems = editState.newItems.filter(
+                            ni => ni.notes.toLowerCase() === sectionNotes.toLowerCase()
+                          );
+                          const isAddingHere = addingToSection?.groupName === group.name && addingToSection?.gender === gender;
+
+                          const existingTypes = new Set([
+                            ...genderItems.map(i => productType(i.categoryName)),
+                            ...sectionNewItems.map(ni => productType(allProducts.find(p => p.id === ni.productId)?.categoryName)),
+                          ]);
+                          const hasTopwear = existingTypes.has("topwear");
+                          const hasBottomwear = existingTypes.has("bottomwear");
+
+                          if (genderItems.length === 0 && sectionNewItems.length === 0 && !isAddingHere) {
+                            // Show minimal empty section so user can add items
+                            return (
+                              <div key={gender} className={`rounded-lg border-2 border-dashed ${isBoys ? "border-blue-100" : "border-pink-100"}`}>
+                                <div className={`px-4 py-2 flex items-center justify-between ${isBoys ? "bg-blue-50/40" : "bg-pink-50/40"}`}>
+                                  <span className={`text-xs font-semibold uppercase tracking-wide ${isBoys ? "text-blue-400" : "text-pink-400"}`}>
+                                    {isBoys ? "Boys" : "Girls"}
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <button type="button" onClick={() => { setAddingToSection({ groupName: group.name, gender, itemType: "topwear" }); setAddSectionForm({ productId: 0, productName: "", productImages: [], unitPrice: "", totalQuantity: "1" }); }} className="text-xs text-indigo-500 hover:text-indigo-700 flex items-center gap-0.5 transition-colors">
+                                      <Plus className="h-3 w-3" /> Topwear
+                                    </button>
+                                    <span className="text-gray-200">|</span>
+                                    <button type="button" onClick={() => { setAddingToSection({ groupName: group.name, gender, itemType: "bottomwear" }); setAddSectionForm({ productId: 0, productName: "", productImages: [], unitPrice: "", totalQuantity: "1" }); }} className="text-xs text-indigo-500 hover:text-indigo-700 flex items-center gap-0.5 transition-colors">
+                                      <Plus className="h-3 w-3" /> Bottomwear
+                                    </button>
+                                    <span className="text-gray-200">|</span>
+                                    <button type="button" onClick={() => { setAddingToSection({ groupName: group.name, gender, itemType: "accessory" }); setAddSectionForm({ productId: 0, productName: "", productImages: [], unitPrice: "", totalQuantity: "1" }); }} className="text-xs text-indigo-500 hover:text-indigo-700 flex items-center gap-0.5 transition-colors">
+                                      <Plus className="h-3 w-3" /> Accessory
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
 
                           return (
                             <div key={gender} className={`rounded-lg border overflow-hidden ${isBoys ? "border-blue-100" : "border-pink-100"}`}>
@@ -563,149 +583,190 @@ export default function OrderDetailPage() {
                                 </span>
                               </div>
 
-                              {/* Product rows */}
-                              <div className="divide-y divide-gray-50">
-                                {genderItems.map(item => {
-                                  const itemIdx = order.items.findIndex(i => i.id === item.id);
-                                  const editItem = editState.items[itemIdx];
-                                  const imgs = editItem.newProductImages !== undefined
-                                    ? editItem.newProductImages
-                                    : (item.productImages ?? (item.productImageUrl ? [item.productImageUrl] : []));
-                                  return (
-                                    <div key={item.id} className="flex items-center gap-3 px-4 py-2.5">
-                                      {/* Thumbnail */}
-                                      <div className="flex-shrink-0">
-                                        {imgs.length > 0 ? (
-                                          <button
-                                            type="button"
-                                            onClick={() => setLightbox({ images: imgs, idx: 0, name: editItem.newProductName ?? item.productName })}
-                                            className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 hover:border-indigo-400 transition-colors block"
-                                          >
-                                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                                            <img src={imgs[0]} alt={item.productName} className="w-full h-full object-cover" />
-                                          </button>
-                                        ) : (
-                                          <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
-                                            <Images className="h-3.5 w-3.5 text-gray-300" />
-                                          </div>
-                                        )}
+                              {/* Existing product rows */}
+                              {genderItems.length > 0 && (
+                                <div className="divide-y divide-gray-50">
+                                  {genderItems.map(item => {
+                                    const itemIdx = order.items.findIndex(i => i.id === item.id);
+                                    const editItem = editState.items[itemIdx];
+                                    const imgs = editItem.newProductImages !== undefined
+                                      ? editItem.newProductImages
+                                      : (item.productImages ?? (item.productImageUrl ? [item.productImageUrl] : []));
+                                    return (
+                                      <div key={item.id} className="flex items-center gap-3 px-4 py-2.5">
+                                        <div className="flex-shrink-0">
+                                          {imgs.length > 0 ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => setLightbox({ images: imgs, idx: 0, name: editItem.newProductName ?? item.productName })}
+                                              className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 hover:border-indigo-400 transition-colors block"
+                                            >
+                                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                                              <img src={imgs[0]} alt={item.productName} className="w-full h-full object-cover" />
+                                            </button>
+                                          ) : (
+                                            <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
+                                              <Images className="h-3.5 w-3.5 text-gray-300" />
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          {changingProductIdx === itemIdx ? (
+                                            <div className="flex items-center gap-2">
+                                              <select
+                                                className="flex-1 border rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
+                                                disabled={alternativesLoading}
+                                                value={editItem.newProductId ?? item.productId}
+                                                onChange={e => {
+                                                  const pid = parseInt(e.target.value);
+                                                  const prod = alternativeProducts?.find(p => p.id === pid);
+                                                  setEditState(prev => {
+                                                    if (!prev) return prev;
+                                                    const its = [...prev.items];
+                                                    its[itemIdx] = {
+                                                      ...its[itemIdx],
+                                                      newProductId: pid,
+                                                      newProductName: prod?.name,
+                                                      newProductImages: prod?.images?.map(img => img.imageUrl) ?? [],
+                                                      unitPrice: String(Math.round(prod?.finalPrice ?? parseFloat(its[itemIdx].unitPrice))),
+                                                    };
+                                                    return { ...prev, items: its };
+                                                  });
+                                                }}
+                                              >
+                                                {alternativesLoading
+                                                  ? <option>Loading products...</option>
+                                                  : alternativeProducts?.map(p => (
+                                                      <option key={p.id} value={p.id}>{p.name}</option>
+                                                    ))
+                                                }
+                                              </select>
+                                              <button type="button" className="text-gray-400 hover:text-gray-600" onClick={() => setChangingProductIdx(null)}>
+                                                <X className="h-3.5 w-3.5" />
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                              <p className="text-xs font-medium text-gray-800 truncate">{editItem.newProductName ?? item.productName}</p>
+                                              <button type="button" className="text-xs text-indigo-500 hover:text-indigo-700 shrink-0" onClick={() => setChangingProductIdx(itemIdx)}>
+                                                Change
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-1 flex-shrink-0">
+                                          <span className="text-xs text-gray-500">₹</span>
+                                          <Input type="number" min={0} step="1" className="w-24 h-7 text-xs text-right" value={editItem.unitPrice} onChange={e => updateItemField(itemIdx, "unitPrice", e.target.value)} />
+                                        </div>
+                                        <button type="button" title="Remove item" onClick={() => setEditState(prev => prev ? { ...prev, removedItemIds: [...prev.removedItemIds, item.id] } : prev)} className="flex-shrink-0 p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors">
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
                                       </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
 
-                                      {/* Name + change button */}
+                              {/* New items added to this section */}
+                              {sectionNewItems.length > 0 && (
+                                <div className={`divide-y divide-green-50 ${genderItems.length > 0 ? "border-t border-green-100" : ""}`}>
+                                  {sectionNewItems.map(ni => (
+                                    <div key={ni.tempId} className="flex items-center gap-3 px-4 py-2.5 bg-green-50/50">
+                                      {ni.productImages.length > 0 ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img src={ni.productImages[0]} alt={ni.productName} className="w-10 h-10 rounded-lg object-cover border border-green-200 flex-shrink-0" />
+                                      ) : (
+                                        <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                                          <Images className="h-3.5 w-3.5 text-gray-300" />
+                                        </div>
+                                      )}
                                       <div className="flex-1 min-w-0">
-                                        {changingProductIdx === itemIdx ? (
-                                          <div className="flex items-center gap-2">
-                                            <select
-                                              className="flex-1 border rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
-                                              disabled={alternativesLoading}
-                                              value={editItem.newProductId ?? item.productId}
-                                              onChange={e => {
-                                                const pid = parseInt(e.target.value);
-                                                const prod = alternativeProducts?.find(p => p.id === pid);
-                                                setEditState(prev => {
-                                                  if (!prev) return prev;
-                                                  const its = [...prev.items];
-                                                  its[itemIdx] = {
-                                                    ...its[itemIdx],
-                                                    newProductId: pid,
-                                                    newProductName: prod?.name,
-                                                    newProductImages: prod?.images?.map(img => img.imageUrl) ?? [],
-                                                    unitPrice: String(Math.round(prod?.finalPrice ?? parseFloat(its[itemIdx].unitPrice))),
-                                                  };
-                                                  return { ...prev, items: its };
-                                                });
-                                              }}
-                                            >
-                                              {alternativesLoading
-                                                ? <option>Loading products...</option>
-                                                : alternativeProducts?.map(p => (
-                                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                                  ))
-                                              }
-                                            </select>
-                                            <button
-                                              type="button"
-                                              className="text-gray-400 hover:text-gray-600"
-                                              onClick={() => setChangingProductIdx(null)}
-                                            >
-                                              <X className="h-3.5 w-3.5" />
-                                            </button>
-                                          </div>
-                                        ) : (
-                                          <div className="flex items-center gap-1.5 flex-wrap">
-                                            <p className="text-xs font-medium text-gray-800 truncate">
-                                              {editItem.newProductName ?? item.productName}
-                                            </p>
-                                            <button
-                                              type="button"
-                                              className="text-xs text-indigo-500 hover:text-indigo-700 shrink-0"
-                                              onClick={() => setChangingProductIdx(itemIdx)}
-                                            >
-                                              Change
-                                            </button>
-                                          </div>
-                                        )}
+                                        <p className="text-xs font-medium text-gray-800 truncate">{ni.productName}</p>
+                                        <span className="text-xs text-green-600 font-medium">New</span>
                                       </div>
-
-                                      {/* Price input */}
                                       <div className="flex items-center gap-1 flex-shrink-0">
                                         <span className="text-xs text-gray-500">₹</span>
-                                        <Input
-                                          type="number"
-                                          min={0}
-                                          step="1"
-                                          className="w-24 h-7 text-xs text-right"
-                                          value={editItem.unitPrice}
-                                          onChange={e => updateItemField(itemIdx, "unitPrice", e.target.value)}
+                                        <Input type="number" min={0} step="1" className="w-20 h-7 text-xs text-right" value={ni.unitPrice}
+                                          onChange={e => setEditState(prev => prev ? { ...prev, newItems: prev.newItems.map(x => x.tempId === ni.tempId ? { ...x, unitPrice: e.target.value } : x) } : prev)}
+                                        />
+                                        <span className="text-xs text-gray-400 mx-1">×</span>
+                                        <Input type="number" min={0} className="w-14 h-7 text-xs text-center" value={ni.totalQuantity}
+                                          onChange={e => setEditState(prev => prev ? { ...prev, newItems: prev.newItems.map(x => x.tempId === ni.tempId ? { ...x, totalQuantity: e.target.value } : x) } : prev)}
                                         />
                                       </div>
-                                      {/* Remove button */}
-                                      <button
-                                        type="button"
-                                        title="Remove item"
-                                        onClick={() => setEditState(prev => prev ? { ...prev, removedItemIds: [...prev.removedItemIds, item.id] } : prev)}
-                                        className="flex-shrink-0 p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
+                                      <button type="button" onClick={() => setEditState(prev => prev ? { ...prev, newItems: prev.newItems.filter(x => x.tempId !== ni.tempId) } : prev)} className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors flex-shrink-0">
+                                        <X className="h-3.5 w-3.5" />
                                       </button>
                                     </div>
-                                  );
-                                })}
-                              </div>
+                                  ))}
+                                </div>
+                              )}
 
-                              {/* Shared class-count table for this gender group */}
-                              {sharedCounts.length > 0 && (
-                                <div className="overflow-x-auto border-t border-gray-100">
-                                  <table className="w-full text-xs">
-                                    <thead>
-                                      <tr className={`border-b text-gray-500 ${isBoys ? "bg-blue-50/50" : "bg-pink-50/50"}`}>
-                                        <th className="text-left px-4 py-2 font-medium">Class</th>
-                                        <th className={`text-center px-4 py-2 font-medium ${isBoys ? "text-blue-500" : "text-pink-500"}`}>
-                                          {isBoys ? "Boys" : "Girls"}
-                                        </th>
-                                        <th className="text-center px-4 py-2 font-medium text-gray-400">Total</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {sharedCounts.map((ec, ci) => (
-                                        <tr key={ec.className} className="border-b last:border-0">
-                                          <td className="px-4 py-2 font-medium">{ec.className}</td>
-                                          <td className="px-4 py-2 text-center">
-                                            <Input
-                                              type="number"
-                                              min={0}
-                                              className={`w-16 h-6 text-center text-xs mx-auto ${isBoys ? "border-blue-200 focus-visible:ring-blue-400" : "border-pink-200 focus-visible:ring-pink-400"}`}
-                                              value={ec[countField]}
-                                              onChange={e => updateGroupCount(genderItems, ci, countField, parseInt(e.target.value) || 0)}
-                                            />
-                                          </td>
-                                          <td className="px-4 py-2 text-center font-semibold text-gray-600">
-                                            {ec[countField]}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
+                              {/* Inline add form or add buttons */}
+                              {isAddingHere ? (
+                                <div className={`px-4 py-3 border-t space-y-2 ${isBoys ? "border-blue-100 bg-blue-50/20" : "border-pink-100 bg-pink-50/20"}`}>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-semibold text-indigo-700 capitalize">Add {addingToSection!.itemType}</span>
+                                    <button type="button" onClick={() => setAddingToSection(null)} className="p-0.5 rounded hover:bg-gray-100 transition-colors">
+                                      <X className="h-3 w-3 text-gray-500" />
+                                    </button>
+                                  </div>
+                                  <select
+                                    className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                    value={addSectionForm.productId || ""}
+                                    onChange={e => {
+                                      const pid = parseInt(e.target.value);
+                                      const prod = allProducts.find(p => p.id === pid);
+                                      setAddSectionForm(f => ({ ...f, productId: pid, productName: prod?.name ?? "", productImages: prod?.images?.map(img => img.imageUrl) ?? [], unitPrice: String(Math.round(prod?.finalPrice ?? 0)) }));
+                                    }}
+                                  >
+                                    <option value="">— Select product —</option>
+                                    {allProducts
+                                      .filter(p => productType(p.categoryName) === addingToSection!.itemType)
+                                      .map(p => (
+                                        <option key={p.id} value={p.id}>{p.name} ({p.categoryName}{p.subCategoryName ? ` › ${p.subCategoryName}` : ""})</option>
+                                      ))
+                                    }
+                                  </select>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-xs text-gray-500">₹</span>
+                                      <Input type="number" min={0} step="1" className="w-24 h-7 text-xs text-right" value={addSectionForm.unitPrice} onChange={e => setAddSectionForm(f => ({ ...f, unitPrice: e.target.value }))} />
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <Input type="number" min={0} className="w-16 h-7 text-xs text-center" value={addSectionForm.totalQuantity} onChange={e => setAddSectionForm(f => ({ ...f, totalQuantity: e.target.value }))} />
+                                      <span className="text-xs text-gray-500">pcs</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      disabled={!addSectionForm.productId}
+                                      onClick={() => {
+                                        if (!addSectionForm.productId || !addingToSection) return;
+                                        const tempId = `new-${Date.now()}`;
+                                        setEditState(prev => prev ? { ...prev, newItems: [...prev.newItems, { ...addSectionForm, tempId, notes: sectionNotes }] } : prev);
+                                        setAddingToSection(null);
+                                      }}
+                                      className="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                                    >
+                                      <Plus className="h-3 w-3 inline mr-0.5" /> Add
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="px-4 py-2 border-t border-gray-50 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                  {!hasTopwear && (
+                                    <button type="button" onClick={() => { setAddingToSection({ groupName: group.name, gender, itemType: "topwear" }); setAddSectionForm({ productId: 0, productName: "", productImages: [], unitPrice: "", totalQuantity: "1" }); }} className="text-xs text-indigo-500 hover:text-indigo-700 flex items-center gap-0.5 transition-colors">
+                                      <Plus className="h-3 w-3" /> Topwear
+                                    </button>
+                                  )}
+                                  {!hasBottomwear && (
+                                    <button type="button" onClick={() => { setAddingToSection({ groupName: group.name, gender, itemType: "bottomwear" }); setAddSectionForm({ productId: 0, productName: "", productImages: [], unitPrice: "", totalQuantity: "1" }); }} className={`text-xs text-indigo-500 hover:text-indigo-700 flex items-center gap-0.5 transition-colors ${!hasTopwear ? "border-l border-gray-200 pl-3" : ""}`}>
+                                      <Plus className="h-3 w-3" /> Bottomwear
+                                    </button>
+                                  )}
+                                  <button type="button" onClick={() => { setAddingToSection({ groupName: group.name, gender, itemType: "accessory" }); setAddSectionForm({ productId: 0, productName: "", productImages: [], unitPrice: "", totalQuantity: "1" }); }} className={`text-xs text-indigo-500 hover:text-indigo-700 flex items-center gap-0.5 transition-colors ${(!hasTopwear || !hasBottomwear) ? "border-l border-gray-200 pl-3" : ""}`}>
+                                    <Plus className="h-3 w-3" /> Accessory
+                                  </button>
                                 </div>
                               )}
                             </div>
@@ -740,159 +801,6 @@ export default function OrderDetailPage() {
                     </div>
                   );})}
 
-                  {/* New items added this session */}
-                  {editState.newItems.length > 0 && (
-                    <div className="border-t pt-4 space-y-2">
-                      <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">New Items Added</p>
-                      {editState.newItems.map(ni => (
-                        <div key={ni.tempId} className="flex items-center gap-3 bg-green-50 border border-green-100 rounded-lg px-3 py-2.5">
-                          {ni.productImages.length > 0 ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={ni.productImages[0]} alt={ni.productName} className="w-9 h-9 rounded-md object-cover border border-gray-200 flex-shrink-0" />
-                          ) : (
-                            <div className="w-9 h-9 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0">
-                              <Images className="h-3.5 w-3.5 text-gray-300" />
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-gray-800 truncate">{ni.productName}</p>
-                            {ni.notes && <p className="text-xs text-gray-400">{ni.notes}</p>}
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <span className="text-xs text-gray-500">₹</span>
-                            <Input
-                              type="number" min={0} step="1"
-                              className="w-20 h-7 text-xs text-right"
-                              value={ni.unitPrice}
-                              onChange={e => setEditState(prev => prev ? {
-                                ...prev,
-                                newItems: prev.newItems.map(x => x.tempId === ni.tempId ? { ...x, unitPrice: e.target.value } : x)
-                              } : prev)}
-                            />
-                            <span className="text-xs text-gray-400">×</span>
-                            <Input
-                              type="number" min={0}
-                              className="w-16 h-7 text-xs text-center"
-                              value={ni.totalQuantity}
-                              onChange={e => setEditState(prev => prev ? {
-                                ...prev,
-                                newItems: prev.newItems.map(x => x.tempId === ni.tempId ? { ...x, totalQuantity: e.target.value } : x)
-                              } : prev)}
-                            />
-                            <span className="text-xs text-gray-500">pcs</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setEditState(prev => prev ? { ...prev, newItems: prev.newItems.filter(x => x.tempId !== ni.tempId) } : prev)}
-                            className="p-1 rounded hover:bg-red-100 text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Add Item form */}
-                  {showAddForm ? (
-                    <div className="border-t pt-4 space-y-3">
-                      <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Add Product</p>
-                      <div className="grid grid-cols-1 gap-3">
-                        <div>
-                          <label className="text-xs text-gray-500 mb-1 block">Product</label>
-                          <select
-                            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                            value={addItemForm.productId || ""}
-                            onChange={e => {
-                              const pid = parseInt(e.target.value);
-                              const prod = allProducts.find(p => p.id === pid);
-                              setAddItemForm(f => ({
-                                ...f,
-                                productId: pid,
-                                productName: prod?.name ?? "",
-                                productImages: prod?.images?.map(img => img.imageUrl) ?? [],
-                                unitPrice: String(Math.round(prod?.finalPrice ?? 0)),
-                              }));
-                            }}
-                          >
-                            <option value="">— Select a product —</option>
-                            {allProducts.map(p => (
-                              <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="text-xs text-gray-500 mb-1 block">Notes / Uniform label</label>
-                            <input
-                              list="notes-suggestions"
-                              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                              placeholder="e.g. School Uniform - Boys"
-                              value={addItemForm.notes}
-                              onChange={e => setAddItemForm(f => ({ ...f, notes: e.target.value }))}
-                            />
-                            <datalist id="notes-suggestions">
-                              {notesSuggestions.map(s => <option key={s} value={s ?? ""} />)}
-                            </datalist>
-                          </div>
-                          <div>
-                            <label className="text-xs text-gray-500 mb-1 block">Unit Price (₹)</label>
-                            <Input
-                              type="number" min={0} step="1"
-                              className="h-9 text-sm"
-                              value={addItemForm.unitPrice}
-                              onChange={e => setAddItemForm(f => ({ ...f, unitPrice: e.target.value }))}
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-xs text-gray-500 mb-1 block">Quantity (pieces)</label>
-                          <Input
-                            type="number" min={0}
-                            className="h-9 text-sm w-32"
-                            value={addItemForm.totalQuantity}
-                            onChange={e => setAddItemForm(f => ({ ...f, totalQuantity: e.target.value }))}
-                          />
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => { setShowAddForm(false); setAddItemForm({ productId: 0, productName: "", productImages: [], unitPrice: "", notes: "", totalQuantity: "0" }); }}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!addItemForm.productId}
-                          onClick={() => {
-                            if (!addItemForm.productId) return;
-                            const tempId = `new-${Date.now()}`;
-                            setEditState(prev => prev ? {
-                              ...prev,
-                              newItems: [...prev.newItems, { ...addItemForm, tempId }],
-                            } : prev);
-                            setShowAddForm(false);
-                            setAddItemForm({ productId: 0, productName: "", productImages: [], unitPrice: "", notes: "", totalQuantity: "0" });
-                          }}
-                          className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        >
-                          <Plus className="h-3 w-3 inline mr-1" />Add
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="border-t pt-3">
-                      <button
-                        type="button"
-                        onClick={() => setShowAddForm(true)}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
-                      >
-                        <Plus className="h-3.5 w-3.5" /> Add Product
-                      </button>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             );
