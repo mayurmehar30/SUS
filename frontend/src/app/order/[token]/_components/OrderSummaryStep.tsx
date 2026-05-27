@@ -10,22 +10,30 @@ function imgSrc(url: string | null | undefined): string | null {
   return url.startsWith("http") ? url : `${API_ORIGIN}${url}`;
 }
 
-function ProductThumb({ url, name }: { url: string | null | undefined; name: string }) {
+function ProductChip({ url, name, gender }: { url: string | null | undefined; name: string; gender: "boys" | "girls" }) {
   const src = imgSrc(url);
-  if (!src) {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center flex-shrink-0">
-        <span className="text-xs font-bold text-indigo-400">{name.charAt(0)}</span>
-      </div>
-    );
-  }
+  const accent = gender === "boys"
+    ? "border-blue-100 bg-blue-50/60"
+    : "border-pink-100 bg-pink-50/60";
+  const initAccent = gender === "boys"
+    ? "bg-blue-100 text-blue-600"
+    : "bg-pink-100 text-pink-600";
   return (
-    <img
-      src={src}
-      alt={name}
-      className="w-8 h-8 rounded-lg object-cover border border-gray-100 flex-shrink-0 bg-gray-50"
-      onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-    />
+    <div className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border ${accent}`}>
+      {src ? (
+        <img
+          src={src}
+          alt={name}
+          className="w-10 h-10 rounded-lg object-cover flex-shrink-0 border border-white shadow-sm"
+          onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+        />
+      ) : (
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 font-bold text-sm ${initAccent}`}>
+          {name.charAt(0)}
+        </div>
+      )}
+      <span className="text-xs font-semibold text-gray-700 leading-tight line-clamp-2">{name}</span>
+    </div>
   );
 }
 
@@ -51,57 +59,64 @@ interface OrderSummaryStepProps {
 }
 
 function UniformSummaryRow({ uniform, classRows }: { uniform: UniformSet; classRows: ClassStudentCount[] }) {
-  const estimate = getUniformEstimate(uniform, classRows);
   const totalQty = getUniformTotalQty(uniform, classRows);
-  const boysQty = classRows.reduce((s, r) => s + r.boysCount, 0);
+  const boysQty  = classRows.reduce((s, r) => s + r.boysCount, 0);
   const girlsQty = classRows.reduce((s, r) => s + r.girlsCount, 0);
-  const boysProducts = getSectionProducts(uniform, "boys");
+  const boysProducts  = getSectionProducts(uniform, "boys");
   const girlsProducts = getSectionProducts(uniform, "girls");
 
   return (
-    <div className="px-5 py-4 border-b border-gray-50 last:border-0">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
+    <div className="border-b border-gray-50 last:border-0">
+      {/* Header */}
+      <div className="px-5 py-3.5 bg-gradient-to-r from-indigo-50 to-slate-50 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-sm">
             {uniform.name.charAt(0).toUpperCase()}
           </div>
           <div>
-            <p className="font-semibold text-gray-800 text-sm">{uniform.name}</p>
-            <span className="text-xs text-indigo-500 font-medium">{uniform.uniformType}</span>
+            <p className="font-bold text-gray-800 text-sm leading-tight">{uniform.name}</p>
+            <span className="text-[11px] text-indigo-500 font-semibold">{uniform.uniformType}</span>
           </div>
         </div>
-        <div className="text-right flex-shrink-0">
-          <p className="font-bold text-gray-800 text-base">{formatCurrency(estimate)}</p>
-          <p className="text-sm text-gray-400 font-medium">{totalQty} students</p>
-        </div>
+        {totalQty > 0 && (
+          <span className="text-xs font-bold text-indigo-600 bg-indigo-100 px-2.5 py-1 rounded-full flex-shrink-0">
+            {totalQty} students
+          </span>
+        )}
       </div>
-      <div className="pl-9 space-y-2">
+
+      {/* Products */}
+      <div className="px-5 py-4 space-y-4">
         {boysProducts.length > 0 && (
-          <div className="space-y-1.5">
-            <span className="text-xs font-semibold text-blue-600">Boys</span>
-            {boysProducts.map(p => (
-              <div key={p.id} className="flex items-center gap-2">
-                <ProductThumb url={p.images?.[0]?.imageUrl} name={p.name} />
-                <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
-                  <span className="text-xs text-gray-700 font-medium truncate">{p.name}</span>
-                  <span className="text-xs text-gray-500 flex-shrink-0">{boysQty} × {formatCurrency(p.finalPrice)}</span>
-                </div>
-              </div>
-            ))}
+          <div>
+            <div className="flex items-center gap-1.5 mb-2.5">
+              <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />
+              <span className="text-xs font-bold text-blue-600 uppercase tracking-wide">Boys</span>
+              {boysQty > 0 && (
+                <span className="text-[10px] text-blue-400 font-semibold ml-1">{boysQty} students</span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {boysProducts.map(p => (
+                <ProductChip key={p.id} url={p.images?.[0]?.imageUrl} name={p.name} gender="boys" />
+              ))}
+            </div>
           </div>
         )}
         {girlsProducts.length > 0 && (
-          <div className="space-y-1.5">
-            <span className="text-xs font-semibold text-pink-600">Girls</span>
-            {girlsProducts.map(p => (
-              <div key={p.id} className="flex items-center gap-2">
-                <ProductThumb url={p.images?.[0]?.imageUrl} name={p.name} />
-                <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
-                  <span className="text-xs text-gray-700 font-medium truncate">{p.name}</span>
-                  <span className="text-xs text-gray-500 flex-shrink-0">{girlsQty} × {formatCurrency(p.finalPrice)}</span>
-                </div>
-              </div>
-            ))}
+          <div>
+            <div className="flex items-center gap-1.5 mb-2.5">
+              <span className="w-2 h-2 rounded-full bg-pink-400 inline-block" />
+              <span className="text-xs font-bold text-pink-600 uppercase tracking-wide">Girls</span>
+              {girlsQty > 0 && (
+                <span className="text-[10px] text-pink-400 font-semibold ml-1">{girlsQty} students</span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {girlsProducts.map(p => (
+                <ProductChip key={p.id} url={p.images?.[0]?.imageUrl} name={p.name} gender="girls" />
+              ))}
+            </div>
           </div>
         )}
       </div>
