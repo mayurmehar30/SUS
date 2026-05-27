@@ -503,6 +503,23 @@ public class OrderService {
         }
     }
 
+    public void adminSaveCounts(Long orderId, SaveCountsRequest request) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            String json = mapper.writeValueAsString(request.getCounts());
+            OrderCountHistory history = OrderCountHistory.builder()
+                    .order(order)
+                    .countsJson(json)
+                    .savedBy(request.getSavedBy())
+                    .build();
+            countHistoryRepository.save(history);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to save count history", e);
+        }
+    }
+
     public List<CountHistoryDTO> getCountHistory(String token) {
         Order order = orderRepository.findByOrderToken(token)
                 .orElseThrow(() -> new ResourceNotFoundException("Order", 0L));

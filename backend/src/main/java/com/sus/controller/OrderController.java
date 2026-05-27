@@ -65,6 +65,15 @@ public class OrderController {
         return ResponseEntity.ok(orderService.adminEditOrder(id, request));
     }
 
+    @PutMapping("/{id}/counts")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','SALESMAN')")
+    public ResponseEntity<Void> adminSaveCounts(
+            @PathVariable Long id,
+            @RequestBody SaveCountsRequest request) {
+        orderService.adminSaveCounts(id, request);
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/{id}/lock")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<Void> lockOrder(@PathVariable Long id) {

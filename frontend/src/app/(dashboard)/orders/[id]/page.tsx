@@ -360,7 +360,7 @@ export default function OrderDetailPage() {
 
   const saveCountsMutation = useMutation({
     mutationFn: (rows: Array<{ className: string; boysCount: number; girlsCount: number }>) =>
-      api.put(`/orders/public/${order?.orderToken}/counts`, {
+      api.put(`/orders/${id}/counts`, {
         counts: rows,
         savedBy: user?.name || undefined,
       }),
