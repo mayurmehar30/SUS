@@ -196,10 +196,10 @@ function CountHistoryModal({ item, onClose }: { item: HistoryItem; onClose: () =
   );
 }
 
-function productType(categoryName?: string): "topwear" | "bottomwear" | "accessory" {
-  const c = (categoryName ?? "").toLowerCase();
-  if (c.includes("top")) return "topwear";
-  if (c.includes("bottom")) return "bottomwear";
+function productType(categoryName?: string, subCategoryName?: string): "topwear" | "bottomwear" | "accessory" {
+  const c = `${categoryName ?? ""} ${subCategoryName ?? ""}`.toLowerCase();
+  if (c.includes("top") || c.includes("shirt") || c.includes("blouse") || c.includes("jacket") || c.includes("coat") || c.includes("sweater") || c.includes("kurta")) return "topwear";
+  if (c.includes("bottom") || c.includes("pant") || c.includes("trouser") || c.includes("skirt") || c.includes("short") || c.includes("salwar")) return "bottomwear";
   return "accessory";
 }
 
@@ -542,8 +542,11 @@ export default function OrderDetailPage() {
                           const isAddingHere = addingToSection?.groupName === group.name && addingToSection?.gender === gender;
 
                           const existingTypes = new Set([
-                            ...genderItems.map(i => productType(i.categoryName)),
-                            ...sectionNewItems.map(ni => productType(allProducts.find(p => p.id === ni.productId)?.categoryName)),
+                            ...genderItems.map(i => productType(i.categoryName, i.subCategoryName)),
+                            ...sectionNewItems.map(ni => {
+                              const p = allProducts.find(x => x.id === ni.productId);
+                              return productType(p?.categoryName, p?.subCategoryName);
+                            }),
                           ]);
                           const hasTopwear = existingTypes.has("topwear");
                           const hasBottomwear = existingTypes.has("bottomwear");
@@ -721,12 +724,11 @@ export default function OrderDetailPage() {
                                     }}
                                   >
                                     <option value="">— Select product —</option>
-                                    {allProducts
-                                      .filter(p => productType(p.categoryName) === addingToSection!.itemType)
-                                      .map(p => (
-                                        <option key={p.id} value={p.id}>{p.name} ({p.categoryName}{p.subCategoryName ? ` › ${p.subCategoryName}` : ""})</option>
-                                      ))
-                                    }
+                                    {allProducts.map(p => (
+                                      <option key={p.id} value={p.id}>
+                                        {p.name}{p.categoryName ? ` (${p.categoryName}${p.subCategoryName ? ` › ${p.subCategoryName}` : ""})` : ""}
+                                      </option>
+                                    ))}
                                   </select>
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <div className="flex items-center gap-1">
