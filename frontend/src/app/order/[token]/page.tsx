@@ -681,6 +681,7 @@ export default function PublicOrderPage() {
             {step === 4 && (
               <OrderSummaryStep
                 uniforms={uniforms}
+                classRows={classRows}
                 orderNotes={orderNotes}
                 deliveryNotes={deliveryNotes}
                 onNotesChange={setOrderNotes}
@@ -735,6 +736,7 @@ export default function PublicOrderPage() {
               <div className="sticky top-20">
                 <CartSidebar
                   uniforms={uniforms}
+                  classRows={classRows}
                   grandTotal={grandTotal}
                   totalQty={totalQty}
                   step={step}

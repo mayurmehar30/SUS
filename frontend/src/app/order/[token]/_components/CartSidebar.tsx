@@ -1,10 +1,12 @@
 "use client";
 import { ClipboardList, ChevronRight, ChevronLeft, Package } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { ClassStudentCount } from "@/types";
 import { UniformSet, getUniformEstimate, getUniformTotalQty, hasAnyProduct, getSectionProducts } from "./types";
 
 interface CartSidebarProps {
   uniforms: UniformSet[];
+  classRows: ClassStudentCount[];
   grandTotal: number;
   totalQty: number;
   step: number;
@@ -17,7 +19,7 @@ interface CartSidebarProps {
 }
 
 export default function CartSidebar({
-  uniforms, grandTotal, totalQty, step, maxStep,
+  uniforms, classRows, grandTotal, totalQty, step, maxStep,
   onNext, onBack, submitting, canProceed, className = "",
 }: CartSidebarProps) {
   const withProducts = uniforms.filter(hasAnyProduct);
@@ -46,8 +48,8 @@ export default function CartSidebar({
           </div>
         ) : (
           withProducts.map(uniform => {
-            const est = getUniformEstimate(uniform);
-            const qty = getUniformTotalQty(uniform);
+            const est = getUniformEstimate(uniform, classRows);
+            const qty = getUniformTotalQty(uniform, classRows);
             const boysProducts = getSectionProducts(uniform, "boys");
             const girlsProducts = getSectionProducts(uniform, "girls");
             return (

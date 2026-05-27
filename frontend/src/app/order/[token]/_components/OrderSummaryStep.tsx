@@ -1,6 +1,7 @@
 "use client";
 import { Package, FileText, Truck, Users } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { ClassStudentCount } from "@/types";
 import { UniformSet, getUniformEstimate, getUniformTotalQty, hasAnyProduct, getSectionProducts } from "./types";
 
 const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8090/api").replace(/\/api$/, "");
@@ -37,6 +38,7 @@ interface ContactPerson {
 
 interface OrderSummaryStepProps {
   uniforms: UniformSet[];
+  classRows: ClassStudentCount[];
   orderNotes: string;
   deliveryNotes: string;
   onNotesChange: (v: string) => void;
@@ -48,11 +50,11 @@ interface OrderSummaryStepProps {
   cp2: ContactPerson;
 }
 
-function UniformSummaryRow({ uniform }: { uniform: UniformSet }) {
-  const estimate = getUniformEstimate(uniform);
-  const totalQty = getUniformTotalQty(uniform);
-  const boysQty = uniform.classRows.reduce((s, r) => s + r.boysCount, 0);
-  const girlsQty = uniform.classRows.reduce((s, r) => s + r.girlsCount, 0);
+function UniformSummaryRow({ uniform, classRows }: { uniform: UniformSet; classRows: ClassStudentCount[] }) {
+  const estimate = getUniformEstimate(uniform, classRows);
+  const totalQty = getUniformTotalQty(uniform, classRows);
+  const boysQty = classRows.reduce((s, r) => s + r.boysCount, 0);
+  const girlsQty = classRows.reduce((s, r) => s + r.girlsCount, 0);
   const boysProducts = getSectionProducts(uniform, "boys");
   const girlsProducts = getSectionProducts(uniform, "girls");
 
@@ -69,8 +71,8 @@ function UniformSummaryRow({ uniform }: { uniform: UniformSet }) {
           </div>
         </div>
         <div className="text-right flex-shrink-0">
-          <p className="font-bold text-gray-800 text-sm">{formatCurrency(estimate)}</p>
-          <p className="text-xs text-gray-400">{totalQty} students</p>
+          <p className="font-bold text-gray-800 text-base">{formatCurrency(estimate)}</p>
+          <p className="text-sm text-gray-400 font-medium">{totalQty} students</p>
         </div>
       </div>
       <div className="pl-9 space-y-2">
@@ -108,12 +110,12 @@ function UniformSummaryRow({ uniform }: { uniform: UniformSet }) {
 }
 
 export default function OrderSummaryStep({
-  uniforms, orderNotes, deliveryNotes, onNotesChange, onDeliveryChange,
+  uniforms, classRows, orderNotes, deliveryNotes, onNotesChange, onDeliveryChange,
   termsAccepted, onTermsChange, schoolName, cp1, cp2,
 }: OrderSummaryStepProps) {
   const withProducts = uniforms.filter(hasAnyProduct);
-  const grandTotal = withProducts.reduce((s, u) => s + getUniformEstimate(u), 0);
-  const totalStudents = withProducts.reduce((s, u) => s + getUniformTotalQty(u), 0);
+  const grandTotal = withProducts.reduce((s, u) => s + getUniformEstimate(u, classRows), 0);
+  const totalStudents = withProducts.reduce((s, u) => s + getUniformTotalQty(u, classRows), 0);
 
   return (
     <div className="space-y-5">
@@ -124,7 +126,7 @@ export default function OrderSummaryStep({
           <h3 className="font-semibold text-gray-800 text-sm">Uniform Summary</h3>
           <span className="ml-auto text-xs text-gray-400">{withProducts.length} uniform{withProducts.length !== 1 ? "s" : ""}</span>
         </div>
-        {withProducts.map(u => <UniformSummaryRow key={u.id} uniform={u} />)}
+        {withProducts.map(u => <UniformSummaryRow key={u.id} uniform={u} classRows={classRows} />)}
       </div>
 
       {/* Student count summary */}
@@ -145,17 +147,17 @@ export default function OrderSummaryStep({
             </thead>
             <tbody className="divide-y divide-gray-50">
               {withProducts.map(u => {
-                const boys = u.classRows.reduce((s, r) => s + r.boysCount, 0);
-                const girls = u.classRows.reduce((s, r) => s + r.girlsCount, 0);
+                const boys = classRows.reduce((s, r) => s + r.boysCount, 0);
+                const girls = classRows.reduce((s, r) => s + r.girlsCount, 0);
                 return (
                   <tr key={u.id}>
                     <td className="px-5 py-2.5 font-medium text-gray-700 max-w-[160px]">
                       <div className="truncate">{u.name}</div>
                       <div className="text-gray-400 font-normal">{u.uniformType}</div>
                     </td>
-                    <td className="px-3 py-2.5 text-center font-semibold text-blue-600">{boys}</td>
-                    <td className="px-3 py-2.5 text-center font-semibold text-pink-600">{girls}</td>
-                    <td className="px-3 py-2.5 text-center font-bold text-indigo-700">{boys + girls}</td>
+                    <td className="px-3 py-2.5 text-center font-bold text-blue-600 text-base">{boys}</td>
+                    <td className="px-3 py-2.5 text-center font-bold text-pink-600 text-base">{girls}</td>
+                    <td className="px-3 py-2.5 text-center font-bold text-indigo-700 text-base">{boys + girls}</td>
                   </tr>
                 );
               })}
@@ -163,13 +165,13 @@ export default function OrderSummaryStep({
             <tfoot>
               <tr className="bg-indigo-50 border-t-2 border-indigo-100 font-bold">
                 <td className="px-5 py-2.5 text-gray-700">Grand Total</td>
-                <td className="px-3 py-2.5 text-center text-blue-600">
-                  {withProducts.reduce((s, u) => s + u.classRows.reduce((ss, r) => ss + r.boysCount, 0), 0)}
+                <td className="px-3 py-2.5 text-center text-blue-600 text-base">
+                  {classRows.reduce((s, r) => s + r.boysCount, 0)}
                 </td>
-                <td className="px-3 py-2.5 text-center text-pink-600">
-                  {withProducts.reduce((s, u) => s + u.classRows.reduce((ss, r) => ss + r.girlsCount, 0), 0)}
+                <td className="px-3 py-2.5 text-center text-pink-600 text-base">
+                  {classRows.reduce((s, r) => s + r.girlsCount, 0)}
                 </td>
-                <td className="px-3 py-2.5 text-center text-indigo-700">{totalStudents}</td>
+                <td className="px-3 py-2.5 text-center text-indigo-700 text-base">{totalStudents}</td>
               </tr>
             </tfoot>
           </table>
@@ -186,7 +188,7 @@ export default function OrderSummaryStep({
           {withProducts.map(u => (
             <div key={u.id} className="flex justify-between text-sm">
               <span className="text-gray-500">{u.name}</span>
-              <span className="font-medium text-gray-800">{formatCurrency(getUniformEstimate(u))}</span>
+              <span className="font-semibold text-gray-800 text-base">{formatCurrency(getUniformEstimate(u, classRows))}</span>
             </div>
           ))}
           <div className="pt-3 border-t border-gray-100 flex justify-between">
