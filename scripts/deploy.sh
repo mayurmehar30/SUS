@@ -55,6 +55,13 @@ log "Installing new backend JAR..."
 cp "$DEPLOY_DIR/sus-backend-new.jar" "$BACKEND_LIVE/sus-backend.jar"
 chmod 644 "$BACKEND_LIVE/sus-backend.jar"
 
+log "Writing production config overrides..."
+cat > "$BACKEND_LIVE/application.yml" << 'EOF'
+app:
+  frontend-url: http://3.7.177.41
+  base-url: http://3.7.177.41
+EOF
+
 log "Extracting new frontend build..."
 cd "$FRONTEND_LIVE"
 tar -xzf "$DEPLOY_DIR/frontend-build.tar.gz"
