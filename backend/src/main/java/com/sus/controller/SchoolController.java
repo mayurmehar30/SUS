@@ -6,6 +6,7 @@ import com.sus.service.OrderService;
 import com.sus.service.SchoolService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,6 +22,9 @@ public class SchoolController {
 
     private final SchoolService schoolService;
     private final OrderService orderService;
+
+    @Value("${app.frontend-url:http://localhost:3000}")
+    private String frontendUrl;
 
     @GetMapping
     public ResponseEntity<List<SchoolDTO>> getAll(@RequestParam(required = false) String search) {
@@ -60,6 +64,6 @@ public class SchoolController {
         OrderSummaryDTO order = orderService.getOrCreateDraftOrder(id);
         String token = order.getOrderToken();
         return ResponseEntity.ok(Map.of("token", token,
-                "orderUrl", "http://localhost:3000/order/" + token));
+                "orderUrl", frontendUrl + "/order/" + token));
     }
 }
