@@ -1,6 +1,5 @@
 package com.sus.controller;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,14 +14,10 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/upload")
-@RequiredArgsConstructor
 public class FileUploadController {
 
     @Value("${app.upload-dir:uploads}")
     private String uploadDir;
-
-    @Value("${app.base-url:http://localhost:8090}")
-    private String baseUrl;
 
     @PostMapping
     public ResponseEntity<Map<String, String>> upload(@RequestParam("file") MultipartFile file) throws IOException {
@@ -41,7 +36,8 @@ public class FileUploadController {
         Files.createDirectories(dir);
         Files.copy(file.getInputStream(), dir.resolve(filename));
 
-        String url = baseUrl + "/uploads/" + filename;
+        // Return a root-relative URL so it resolves correctly regardless of host
+        String url = "/uploads/" + filename;
         return ResponseEntity.ok(Map.of("url", url, "filename", filename));
     }
 }
