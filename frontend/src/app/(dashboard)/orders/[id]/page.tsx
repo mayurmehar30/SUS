@@ -445,139 +445,207 @@ export default function OrderDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Order items — edit mode: flat list with inline editors */}
-          {editMode && editState && (
-            <Card>
-              <CardHeader><CardTitle>Order Items</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                {order.items?.map((item, itemIdx) => {
-                  const editItem = editState.items[itemIdx];
-                  return (
-                    <div key={item.id} className="border rounded-lg overflow-hidden">
-                      <div className="flex items-start justify-between px-4 py-3 bg-gray-50 gap-3">
-                        <div className="flex-1 min-w-0">
-                          {changingProductIdx === itemIdx ? (
-                            <div className="flex items-center gap-2">
-                              <select
-                                className="flex-1 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
-                                disabled={alternativesLoading}
-                                value={editItem.newProductId ?? item.productId}
-                                onChange={e => {
-                                  const pid = parseInt(e.target.value);
-                                  const prod = alternativeProducts?.find(p => p.id === pid);
-                                  setEditState(prev => {
-                                    if (!prev) return prev;
-                                    const items = [...prev.items];
-                                    items[itemIdx] = {
-                                      ...items[itemIdx],
-                                      newProductId: pid,
-                                      newProductName: prod?.name,
-                                      unitPrice: String(Math.round(prod?.finalPrice ?? parseFloat(items[itemIdx].unitPrice))),
-                                    };
-                                    return { ...prev, items };
-                                  });
-                                }}
-                              >
-                                {alternativesLoading
-                                  ? <option>Loading products...</option>
-                                  : alternativeProducts?.map(p => (
-                                      <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))
-                                }
-                              </select>
-                              <button
-                                type="button"
-                                className="text-xs text-gray-400 hover:text-gray-600"
-                                onClick={() => setChangingProductIdx(null)}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium text-sm truncate">
-                                {editItem.newProductName ?? item.productName}
-                              </p>
-                              <button
-                                type="button"
-                                className="text-xs text-indigo-500 hover:text-indigo-700 shrink-0"
-                                onClick={() => setChangingProductIdx(itemIdx)}
-                              >
-                                Change
-                              </button>
-                            </div>
-                          )}
-                          {(item.categoryName || item.subCategoryName) && (
-                            <p className="text-xs text-indigo-500 mt-0.5">
-                              {item.categoryName}
-                              {item.subCategoryName && <span className="text-gray-400"> › {item.subCategoryName}</span>}
-                              <span className="text-gray-400"> (alternatives shown)</span>
-                            </p>
-                          )}
+          {/* Order items — edit mode: grouped by uniform name → Boys / Girls sections */}
+          {editMode && editState && (() => {
+            const groups = parseUniformGroups(order.items ?? []);
+
+            const updateGroupCount = (
+              groupItems: OrderItem[],
+              countIdx: number,
+              field: "boysCount" | "girlsCount",
+              value: number,
+            ) => {
+              setEditState(prev => {
+                if (!prev) return prev;
+                const items = [...prev.items];
+                for (const gi of groupItems) {
+                  const idx = order.items.findIndex(i => i.id === gi.id);
+                  if (idx < 0) continue;
+                  const counts = [...items[idx].classStudentCounts];
+                  counts[countIdx] = { ...counts[countIdx], [field]: value };
+                  items[idx] = { ...items[idx], classStudentCounts: counts };
+                }
+                return { ...prev, items };
+              });
+            };
+
+            return (
+              <Card>
+                <CardHeader><CardTitle>Order Items</CardTitle></CardHeader>
+                <CardContent className="space-y-5">
+                  {groups.map((group, gIdx) => (
+                    <div key={group.name}>
+                      {/* Uniform header */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                          {gIdx + 1}
                         </div>
-                        <div className="text-right shrink-0">
-                          <div className="flex items-center gap-2 justify-end">
-                            <span className="text-xs text-gray-500">₹</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              step="1"
-                              className="w-28 h-7 text-sm text-right"
-                              value={editItem.unitPrice}
-                              onChange={e => updateItemField(itemIdx, "unitPrice", e.target.value)}
-                            />
-                          </div>
-                        </div>
+                        <h3 className="font-semibold text-gray-800">{group.name}</h3>
                       </div>
 
-                      {editItem.classStudentCounts.length > 0 && (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-xs">
-                            <thead>
-                              <tr className="border-b text-gray-500">
-                                <th className="text-left px-4 py-2">Class</th>
-                                <th className="text-center px-4 py-2">Boys</th>
-                                <th className="text-center px-4 py-2">Girls</th>
-                                <th className="text-center px-4 py-2">Total</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {editItem.classStudentCounts.map((ec, ci) => (
-                                <tr key={ec.className} className="border-b last:border-0">
-                                  <td className="px-4 py-2 font-medium">{ec.className}</td>
-                                  <td className="px-4 py-2 text-center">
-                                    <Input
-                                      type="number"
-                                      min={0}
-                                      className="w-16 h-6 text-center text-xs mx-auto"
-                                      value={ec.boysCount}
-                                      onChange={e => updateCount(itemIdx, ci, "boysCount", parseInt(e.target.value) || 0)}
-                                    />
-                                  </td>
-                                  <td className="px-4 py-2 text-center">
-                                    <Input
-                                      type="number"
-                                      min={0}
-                                      className="w-16 h-6 text-center text-xs mx-auto"
-                                      value={ec.girlsCount}
-                                      onChange={e => updateCount(itemIdx, ci, "girlsCount", parseInt(e.target.value) || 0)}
-                                    />
-                                  </td>
-                                  <td className="px-4 py-2 text-center font-semibold">
-                                    {ec.boysCount + ec.girlsCount}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
+                      <div className="pl-8 space-y-3">
+                        {(["boys", "girls"] as const).map(gender => {
+                          const genderItems = group[gender];
+                          if (genderItems.length === 0) return null;
+                          const isBoys = gender === "boys";
+                          const countField = isBoys ? "boysCount" : "girlsCount";
+                          const firstFlatIdx = order.items.findIndex(i => i.id === genderItems[0].id);
+                          const sharedCounts = editState.items[firstFlatIdx]?.classStudentCounts ?? [];
+
+                          return (
+                            <div key={gender} className={`rounded-lg border overflow-hidden ${isBoys ? "border-blue-100" : "border-pink-100"}`}>
+                              {/* Gender header */}
+                              <div className={`px-4 py-2 ${isBoys ? "bg-blue-50" : "bg-pink-50"}`}>
+                                <span className={`text-xs font-semibold uppercase tracking-wide ${isBoys ? "text-blue-700" : "text-pink-700"}`}>
+                                  {isBoys ? "Boys" : "Girls"}
+                                </span>
+                              </div>
+
+                              {/* Product rows */}
+                              <div className="divide-y divide-gray-50">
+                                {genderItems.map(item => {
+                                  const itemIdx = order.items.findIndex(i => i.id === item.id);
+                                  const editItem = editState.items[itemIdx];
+                                  const imgs = item.productImages ?? (item.productImageUrl ? [item.productImageUrl] : []);
+                                  return (
+                                    <div key={item.id} className="flex items-center gap-3 px-4 py-2.5">
+                                      {/* Thumbnail */}
+                                      <div className="flex-shrink-0">
+                                        {imgs.length > 0 ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => setLightbox({ images: imgs, idx: 0, name: item.productName })}
+                                            className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 hover:border-indigo-400 transition-colors block"
+                                          >
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img src={imgs[0]} alt={item.productName} className="w-full h-full object-cover" />
+                                          </button>
+                                        ) : (
+                                          <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
+                                            <Images className="h-3.5 w-3.5 text-gray-300" />
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Name + change button */}
+                                      <div className="flex-1 min-w-0">
+                                        {changingProductIdx === itemIdx ? (
+                                          <div className="flex items-center gap-2">
+                                            <select
+                                              className="flex-1 border rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
+                                              disabled={alternativesLoading}
+                                              value={editItem.newProductId ?? item.productId}
+                                              onChange={e => {
+                                                const pid = parseInt(e.target.value);
+                                                const prod = alternativeProducts?.find(p => p.id === pid);
+                                                setEditState(prev => {
+                                                  if (!prev) return prev;
+                                                  const its = [...prev.items];
+                                                  its[itemIdx] = {
+                                                    ...its[itemIdx],
+                                                    newProductId: pid,
+                                                    newProductName: prod?.name,
+                                                    unitPrice: String(Math.round(prod?.finalPrice ?? parseFloat(its[itemIdx].unitPrice))),
+                                                  };
+                                                  return { ...prev, items: its };
+                                                });
+                                              }}
+                                            >
+                                              {alternativesLoading
+                                                ? <option>Loading products...</option>
+                                                : alternativeProducts?.map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                  ))
+                                              }
+                                            </select>
+                                            <button
+                                              type="button"
+                                              className="text-gray-400 hover:text-gray-600"
+                                              onClick={() => setChangingProductIdx(null)}
+                                            >
+                                              <X className="h-3.5 w-3.5" />
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <p className="text-xs font-medium text-gray-800 truncate">
+                                              {editItem.newProductName ?? item.productName}
+                                            </p>
+                                            <button
+                                              type="button"
+                                              className="text-xs text-indigo-500 hover:text-indigo-700 shrink-0"
+                                              onClick={() => setChangingProductIdx(itemIdx)}
+                                            >
+                                              Change
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Price input */}
+                                      <div className="flex items-center gap-1 flex-shrink-0">
+                                        <span className="text-xs text-gray-500">₹</span>
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          step="1"
+                                          className="w-24 h-7 text-xs text-right"
+                                          value={editItem.unitPrice}
+                                          onChange={e => updateItemField(itemIdx, "unitPrice", e.target.value)}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Shared class-count table for this gender group */}
+                              {sharedCounts.length > 0 && (
+                                <div className="overflow-x-auto border-t border-gray-100">
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className={`border-b text-gray-500 ${isBoys ? "bg-blue-50/50" : "bg-pink-50/50"}`}>
+                                        <th className="text-left px-4 py-2 font-medium">Class</th>
+                                        <th className={`text-center px-4 py-2 font-medium ${isBoys ? "text-blue-500" : "text-pink-500"}`}>
+                                          {isBoys ? "Boys" : "Girls"}
+                                        </th>
+                                        <th className="text-center px-4 py-2 font-medium text-gray-400">Total</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {sharedCounts.map((ec, ci) => (
+                                        <tr key={ec.className} className="border-b last:border-0">
+                                          <td className="px-4 py-2 font-medium">{ec.className}</td>
+                                          <td className="px-4 py-2 text-center">
+                                            <Input
+                                              type="number"
+                                              min={0}
+                                              className={`w-16 h-6 text-center text-xs mx-auto ${isBoys ? "border-blue-200 focus-visible:ring-blue-400" : "border-pink-200 focus-visible:ring-pink-400"}`}
+                                              value={ec[countField]}
+                                              onChange={e => updateGroupCount(genderItems, ci, countField, parseInt(e.target.value) || 0)}
+                                            />
+                                          </td>
+                                          <td className="px-4 py-2 text-center font-semibold text-gray-600">
+                                            {ec[countField]}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {gIdx < groups.length - 1 && <div className="mt-5 border-t border-dashed border-gray-100" />}
                     </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          )}
+                  ))}
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Order items — view mode: grouped by uniform name → boys / girls */}
           {!editMode && (() => {
