@@ -444,6 +444,7 @@ public class OrderService {
             OrderCountHistory history = OrderCountHistory.builder()
                     .order(order)
                     .countsJson(json)
+                    .savedBy(request.getSavedBy())
                     .build();
             countHistoryRepository.save(history);
         } catch (Exception e) {
@@ -456,7 +457,7 @@ public class OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Order", 0L));
         return countHistoryRepository.findByOrderIdOrderBySavedAtDesc(order.getId())
                 .stream()
-                .map(h -> new CountHistoryDTO(h.getId(), h.getSavedAt(), h.getCountsJson()))
+                .map(h -> new CountHistoryDTO(h.getId(), h.getSavedAt(), h.getCountsJson(), h.getSavedBy()))
                 .collect(Collectors.toList());
     }
 

@@ -7,6 +7,7 @@ import java.util.List;
 @Data
 public class SaveCountsRequest {
     private List<ClassCountDTO> counts;
+    private String savedBy;
 
     @Data
     public static class ClassCountDTO {

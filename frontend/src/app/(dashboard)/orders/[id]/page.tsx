@@ -134,7 +134,7 @@ function ImageLightbox({ images, initialIndex, productName, onClose }: {
 
 // ── Count history types & modal ───────────────────────────────────────────────
 interface CountEntry { className: string; boysCount: number; girlsCount: number; }
-interface HistoryItem { id: number; savedAt: string; countsJson: string; }
+interface HistoryItem { id: number; savedAt: string; countsJson: string; savedBy?: string; }
 
 function CountHistoryModal({ item, onClose }: { item: HistoryItem; onClose: () => void }) {
   const counts: CountEntry[] = JSON.parse(item.countsJson);
@@ -155,6 +155,7 @@ function CountHistoryModal({ item, onClose }: { item: HistoryItem; onClose: () =
               <span className="font-semibold text-sm">Count Snapshot</span>
             </div>
             <p className="text-indigo-200 text-xs">{dateStr} · {timeStr}</p>
+            {item.savedBy && <p className="text-indigo-300 text-xs mt-0.5">By {item.savedBy}</p>}
           </div>
           <div className="text-right flex-shrink-0">
             <p className="font-bold text-base">{boys + girls} students</p>
@@ -792,7 +793,10 @@ export default function OrderDetailPage() {
                           <p className="text-xs font-semibold text-gray-700 group-hover:text-indigo-700 transition-colors">
                             {dateStr} · {timeStr}
                           </p>
-                          <p className="text-xs text-gray-400 mt-0.5">{boys} boys · {girls} girls</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {h.savedBy && <span className="text-indigo-500 font-medium">{h.savedBy} · </span>}
+                            {boys} boys · {girls} girls
+                          </p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <span className="text-sm font-bold text-indigo-600">{boys + girls} students</span>

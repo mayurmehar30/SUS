@@ -13,4 +13,5 @@ public class CountHistoryDTO {
     private Long id;
     private LocalDateTime savedAt;
     private String countsJson;
+    private String savedBy;
 }

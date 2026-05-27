@@ -676,6 +676,7 @@ export default function PublicOrderPage() {
                 token={token}
                 onUpdateRow={updateClassRow}
                 locked={order.locked}
+                savedBy={cp1.name || undefined}
               />
             )}
             {step === 4 && (

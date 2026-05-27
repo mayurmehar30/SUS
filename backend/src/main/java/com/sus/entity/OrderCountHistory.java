@@ -27,4 +27,7 @@ public class OrderCountHistory {
 
     @Column(name = "counts_json", columnDefinition = "TEXT", nullable = false)
     private String countsJson;
+
+    @Column(name = "saved_by")
+    private String savedBy;
 }
