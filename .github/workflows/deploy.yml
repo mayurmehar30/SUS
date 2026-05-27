@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   build-backend:
     name: Build Spring Boot JAR
@@ -138,6 +142,11 @@ jobs:
           scp -i ~/.ssh/sus-key.pem \
             scripts/deploy.sh \
             ec2-user@${{ secrets.EC2_HOST }}:/home/ec2-user/deployments/deploy.sh
+
+      - name: Verify artifacts on EC2
+        run: |
+          ssh -i ~/.ssh/sus-key.pem ec2-user@${{ secrets.EC2_HOST }} \
+            "ls -lh /home/ec2-user/deployments/sus-backend-new.jar /home/ec2-user/deployments/frontend-build.tar.gz"
 
       - name: Run deploy script on EC2
         run: |
