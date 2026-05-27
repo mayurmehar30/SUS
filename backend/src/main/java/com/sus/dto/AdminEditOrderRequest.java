@@ -18,6 +18,8 @@ public class AdminEditOrderRequest {
     private BigDecimal specialDiscount;
     private BigDecimal gstPercent;
     private List<EditOrderItemRequest> items;
+    private List<Long> removeItemIds;
+    private List<NewOrderItemRequest> newItems;
 
     @Data
     @NoArgsConstructor
@@ -28,5 +30,15 @@ public class AdminEditOrderRequest {
         private BigDecimal unitPrice;
         private String notes;
         private List<ClassStudentCountDTO> classStudentCounts;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class NewOrderItemRequest {
+        private Long productId;
+        private BigDecimal unitPrice;
+        private String notes;
+        private Integer totalQuantity;
     }
 }

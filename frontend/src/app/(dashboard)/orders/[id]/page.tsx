@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Pencil, X, Save, History, ChevronRight, Images, ChevronLeft } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Pencil, X, Save, History, ChevronRight, Images, ChevronLeft, Plus, ChevronDown, Trash2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Order, OrderItem, OrderStatus, Product } from "@/types";
+import { Order, OrderItem, OrderStatus, Product, ApiPage } from "@/types";
 import { formatCurrency, formatDateTime, ORDER_STATUS_COLORS } from "@/lib/utils";
 import api from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
@@ -215,6 +215,16 @@ type EditItemState = {
   }>;
 };
 
+type NewEditItem = {
+  tempId: string;
+  productId: number;
+  productName: string;
+  productImages: string[];
+  unitPrice: string;
+  notes: string;
+  totalQuantity: string;
+};
+
 type EditState = {
   notes: string;
   advanceAmount: string;
@@ -222,6 +232,8 @@ type EditState = {
   specialDiscount: string;
   gstPercent: string;
   items: EditItemState[];
+  removedItemIds: number[];
+  newItems: NewEditItem[];
 };
 
 function buildEditState(order: Order): EditState {
@@ -234,6 +246,8 @@ function buildEditState(order: Order): EditState {
     paymentStatus: order.paymentStatus,
     specialDiscount: String(Math.round(order.specialDiscount ?? 0)),
     gstPercent: gstPct,
+    removedItemIds: [],
+    newItems: [],
     items: order.items.map(item => {
       // Use the school's full class list so admin can add counts for missing classes.
       // Fall back to the item's existing counts if the school has no classNames configured.
@@ -279,6 +293,18 @@ export default function OrderDetailPage() {
   const [classCountsEditing, setClassCountsEditing] = useState(false);
   const [classCountsEditRows, setClassCountsEditRows] = useState<CountRow[]>([]);
 
+  // Collapsed uniform groups (view + edit mode)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = (name: string) => setCollapsedGroups(prev => {
+    const next = new Set(prev);
+    if (next.has(name)) next.delete(name); else next.add(name);
+    return next;
+  });
+
+  // Add item form
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addItemForm, setAddItemForm] = useState({ productId: 0, productName: "", productImages: [] as string[], unitPrice: "", notes: "", totalQuantity: "0" });
+
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: ["order", id],
     queryFn: () => api.get(`/orders/${id}`).then(r => r.data),
@@ -305,6 +331,14 @@ export default function OrderDetailPage() {
     enabled: changingItemId != null,
     staleTime: 30_000,
   });
+
+  const { data: allProductsPage } = useQuery<ApiPage<Product>>({
+    queryKey: ["all-products-edit"],
+    queryFn: () => api.get("/products", { params: { active: true, size: 500 } }).then(r => r.data),
+    enabled: editMode,
+    staleTime: 60_000,
+  });
+  const allProducts = allProductsPage?.content ?? [];
 
   const editMutation = useMutation({
     mutationFn: (payload: object) => api.put(`/orders/${id}/edit`, payload).then(r => r.data),
@@ -341,6 +375,8 @@ export default function OrderDetailPage() {
     setEditMode(false);
     setEditState(null);
     setChangingProductIdx(null);
+    setShowAddForm(false);
+    setCollapsedGroups(new Set());
   }
 
   function saveEdit() {
@@ -351,18 +387,27 @@ export default function OrderDetailPage() {
       paymentStatus: editState.paymentStatus,
       specialDiscount: parseFloat(editState.specialDiscount) || 0,
       gstPercent: parseFloat(editState.gstPercent) || 0,
-      items: editState.items.map(item => ({
-        id: item.id,
-        ...(item.newProductId ? { newProductId: item.newProductId } : {}),
-        unitPrice: parseFloat(item.unitPrice) || 0,
-        notes: item.notes,
-        classStudentCounts: item.classStudentCounts.map(c => ({
-          id: c.id,
-          className: c.className,
-          boysCount: c.boysCount,
-          girlsCount: c.girlsCount,
-          remarks: c.remarks,
+      items: editState.items
+        .filter(item => !editState.removedItemIds.includes(item.id))
+        .map(item => ({
+          id: item.id,
+          ...(item.newProductId ? { newProductId: item.newProductId } : {}),
+          unitPrice: parseFloat(item.unitPrice) || 0,
+          notes: item.notes,
+          classStudentCounts: item.classStudentCounts.map(c => ({
+            id: c.id,
+            className: c.className,
+            boysCount: c.boysCount,
+            girlsCount: c.girlsCount,
+            remarks: c.remarks,
+          })),
         })),
+      removeItemIds: editState.removedItemIds,
+      newItems: editState.newItems.map(ni => ({
+        productId: ni.productId,
+        unitPrice: parseFloat(ni.unitPrice) || 0,
+        notes: ni.notes,
+        totalQuantity: parseInt(ni.totalQuantity) || 0,
       })),
     };
     editMutation.mutate(payload);
@@ -476,23 +521,33 @@ export default function OrderDetailPage() {
               });
             };
 
+            const notesSuggestions = Array.from(new Set((order.items ?? []).map(i => i.notes).filter(Boolean)));
+
             return (
               <Card>
                 <CardHeader><CardTitle>Order Items</CardTitle></CardHeader>
                 <CardContent className="space-y-5">
-                  {groups.map((group, gIdx) => (
+                  {groups.map((group, gIdx) => {
+                    const isCollapsed = collapsedGroups.has(group.name);
+                    return (
                     <div key={group.name}>
-                      {/* Uniform header */}
-                      <div className="flex items-center gap-2 mb-3">
+                      {/* Uniform header with collapse toggle */}
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(group.name)}
+                        className="flex items-center gap-2 mb-3 w-full text-left group/header"
+                      >
                         <div className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
                           {gIdx + 1}
                         </div>
-                        <h3 className="font-semibold text-gray-800">{group.name}</h3>
-                      </div>
+                        <h3 className="font-semibold text-gray-800 flex-1">{group.name}</h3>
+                        <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                      </button>
 
+                      {!isCollapsed && (<>
                       <div className="pl-8 space-y-3">
                         {(["boys", "girls"] as const).map(gender => {
-                          const genderItems = group[gender];
+                          const genderItems = group[gender].filter(i => !editState.removedItemIds.includes(i.id));
                           if (genderItems.length === 0) return null;
                           const isBoys = gender === "boys";
                           const countField = isBoys ? "boysCount" : "girlsCount";
@@ -523,7 +578,7 @@ export default function OrderDetailPage() {
                                         {imgs.length > 0 ? (
                                           <button
                                             type="button"
-                                            onClick={() => setLightbox({ images: imgs, idx: 0, name: item.productName })}
+                                            onClick={() => setLightbox({ images: imgs, idx: 0, name: editItem.newProductName ?? item.productName })}
                                             className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 hover:border-indigo-400 transition-colors block"
                                           >
                                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -604,6 +659,15 @@ export default function OrderDetailPage() {
                                           onChange={e => updateItemField(itemIdx, "unitPrice", e.target.value)}
                                         />
                                       </div>
+                                      {/* Remove button */}
+                                      <button
+                                        type="button"
+                                        title="Remove item"
+                                        onClick={() => setEditState(prev => prev ? { ...prev, removedItemIds: [...prev.removedItemIds, item.id] } : prev)}
+                                        className="flex-shrink-0 p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
                                     </div>
                                   );
                                 })}
@@ -649,9 +713,186 @@ export default function OrderDetailPage() {
                         })}
                       </div>
 
+                      {/* Removed items in this group */}
+                      {(() => {
+                        const removedInGroup = [...group.boys, ...group.girls].filter(i => editState.removedItemIds.includes(i.id));
+                        if (!removedInGroup.length) return null;
+                        return (
+                          <div className="pl-8 mt-2 space-y-1">
+                            {removedInGroup.map(item => (
+                              <div key={item.id} className="flex items-center gap-2 px-3 py-1.5 bg-red-50 rounded-lg border border-red-100">
+                                <span className="text-xs text-red-400 line-through flex-1">{item.productName}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditState(prev => prev ? { ...prev, removedItemIds: prev.removedItemIds.filter(rid => rid !== item.id) } : prev)}
+                                  className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 flex-shrink-0"
+                                >
+                                  <RotateCcw className="h-3 w-3" /> Undo
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                      </>)}
+
                       {gIdx < groups.length - 1 && <div className="mt-5 border-t border-dashed border-gray-100" />}
                     </div>
-                  ))}
+                  );})}
+
+                  {/* New items added this session */}
+                  {editState.newItems.length > 0 && (
+                    <div className="border-t pt-4 space-y-2">
+                      <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">New Items Added</p>
+                      {editState.newItems.map(ni => (
+                        <div key={ni.tempId} className="flex items-center gap-3 bg-green-50 border border-green-100 rounded-lg px-3 py-2.5">
+                          {ni.productImages.length > 0 ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={ni.productImages[0]} alt={ni.productName} className="w-9 h-9 rounded-md object-cover border border-gray-200 flex-shrink-0" />
+                          ) : (
+                            <div className="w-9 h-9 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                              <Images className="h-3.5 w-3.5 text-gray-300" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-gray-800 truncate">{ni.productName}</p>
+                            {ni.notes && <p className="text-xs text-gray-400">{ni.notes}</p>}
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-xs text-gray-500">₹</span>
+                            <Input
+                              type="number" min={0} step="1"
+                              className="w-20 h-7 text-xs text-right"
+                              value={ni.unitPrice}
+                              onChange={e => setEditState(prev => prev ? {
+                                ...prev,
+                                newItems: prev.newItems.map(x => x.tempId === ni.tempId ? { ...x, unitPrice: e.target.value } : x)
+                              } : prev)}
+                            />
+                            <span className="text-xs text-gray-400">×</span>
+                            <Input
+                              type="number" min={0}
+                              className="w-16 h-7 text-xs text-center"
+                              value={ni.totalQuantity}
+                              onChange={e => setEditState(prev => prev ? {
+                                ...prev,
+                                newItems: prev.newItems.map(x => x.tempId === ni.tempId ? { ...x, totalQuantity: e.target.value } : x)
+                              } : prev)}
+                            />
+                            <span className="text-xs text-gray-500">pcs</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setEditState(prev => prev ? { ...prev, newItems: prev.newItems.filter(x => x.tempId !== ni.tempId) } : prev)}
+                            className="p-1 rounded hover:bg-red-100 text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add Item form */}
+                  {showAddForm ? (
+                    <div className="border-t pt-4 space-y-3">
+                      <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Add Product</p>
+                      <div className="grid grid-cols-1 gap-3">
+                        <div>
+                          <label className="text-xs text-gray-500 mb-1 block">Product</label>
+                          <select
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                            value={addItemForm.productId || ""}
+                            onChange={e => {
+                              const pid = parseInt(e.target.value);
+                              const prod = allProducts.find(p => p.id === pid);
+                              setAddItemForm(f => ({
+                                ...f,
+                                productId: pid,
+                                productName: prod?.name ?? "",
+                                productImages: prod?.images?.map(img => img.imageUrl) ?? [],
+                                unitPrice: String(Math.round(prod?.finalPrice ?? 0)),
+                              }));
+                            }}
+                          >
+                            <option value="">— Select a product —</option>
+                            {allProducts.map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs text-gray-500 mb-1 block">Notes / Uniform label</label>
+                            <input
+                              list="notes-suggestions"
+                              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                              placeholder="e.g. School Uniform - Boys"
+                              value={addItemForm.notes}
+                              onChange={e => setAddItemForm(f => ({ ...f, notes: e.target.value }))}
+                            />
+                            <datalist id="notes-suggestions">
+                              {notesSuggestions.map(s => <option key={s} value={s ?? ""} />)}
+                            </datalist>
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500 mb-1 block">Unit Price (₹)</label>
+                            <Input
+                              type="number" min={0} step="1"
+                              className="h-9 text-sm"
+                              value={addItemForm.unitPrice}
+                              onChange={e => setAddItemForm(f => ({ ...f, unitPrice: e.target.value }))}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 mb-1 block">Quantity (pieces)</label>
+                          <Input
+                            type="number" min={0}
+                            className="h-9 text-sm w-32"
+                            value={addItemForm.totalQuantity}
+                            onChange={e => setAddItemForm(f => ({ ...f, totalQuantity: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { setShowAddForm(false); setAddItemForm({ productId: 0, productName: "", productImages: [], unitPrice: "", notes: "", totalQuantity: "0" }); }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!addItemForm.productId}
+                          onClick={() => {
+                            if (!addItemForm.productId) return;
+                            const tempId = `new-${Date.now()}`;
+                            setEditState(prev => prev ? {
+                              ...prev,
+                              newItems: [...prev.newItems, { ...addItemForm, tempId }],
+                            } : prev);
+                            setShowAddForm(false);
+                            setAddItemForm({ productId: 0, productName: "", productImages: [], unitPrice: "", notes: "", totalQuantity: "0" });
+                          }}
+                          className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <Plus className="h-3 w-3 inline mr-1" />Add
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="border-t pt-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddForm(true)}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Add Product
+                      </button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );
@@ -664,17 +905,24 @@ export default function OrderDetailPage() {
               <Card>
                 <CardHeader><CardTitle>Uniform List</CardTitle></CardHeader>
                 <CardContent className="space-y-5">
-                  {groups.map((group, idx) => (
+                  {groups.map((group, idx) => {
+                    const isCollapsed = collapsedGroups.has(group.name);
+                    return (
                     <div key={group.name}>
-                      {/* Uniform header */}
-                      <div className="flex items-center gap-2 mb-3">
+                      {/* Uniform header with collapse */}
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(group.name)}
+                        className="flex items-center gap-2 mb-3 w-full text-left group/header"
+                      >
                         <div className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
                           {idx + 1}
                         </div>
-                        <h3 className="font-semibold text-gray-800">{group.name}</h3>
-                      </div>
+                        <h3 className="font-semibold text-gray-800 flex-1">{group.name}</h3>
+                        <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                      </button>
 
-                      <div className="pl-8 space-y-2">
+                      {!isCollapsed && <div className="pl-8 space-y-2">
                         {(["boys", "girls"] as const).map(gender => {
                           const items = group[gender];
                           if (items.length === 0) return null;
@@ -741,11 +989,11 @@ export default function OrderDetailPage() {
                             </div>
                           );
                         })}
-                      </div>
+                      </div>}
 
                       {idx < groups.length - 1 && <div className="mt-5 border-t border-dashed border-gray-100" />}
                     </div>
-                  ))}
+                  );})}
                 </CardContent>
               </Card>
             );
@@ -763,21 +1011,28 @@ export default function OrderDetailPage() {
             const totalBoys   = displayRows.reduce((s, r) => s + r.boysCount, 0);
             const totalGirls  = displayRows.reduce((s, r) => s + r.girlsCount, 0);
             const editTotal   = classCountsEditing ? classCountsEditRows.reduce((s, r) => s + r.boysCount + r.girlsCount, 0) : 0;
+            // Hide columns that are all zeros in view mode; always show both in edit mode
+            const showBoys  = classCountsEditing || totalBoys > 0;
+            const showGirls = classCountsEditing || totalGirls > 0;
+            const summaryCollapsed = collapsedGroups.has("__summary__");
 
             return (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between flex-wrap gap-2">
-                    <span>Class-wise Summary</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup("__summary__")}
+                      className="flex items-center gap-2 text-left"
+                    >
+                      <span>Class-wise Summary</span>
+                      <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${summaryCollapsed ? "-rotate-90" : ""}`} />
+                    </button>
                     <div className="flex items-center gap-2">
                       {!classCountsEditing && (
                         <div className="flex items-center gap-3 text-xs font-normal text-gray-500 mr-1">
-                          <span className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />{totalBoys} boys
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-pink-500 inline-block" />{totalGirls} girls
-                          </span>
+                          {showBoys && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />{totalBoys} boys</span>}
+                          {showGirls && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-pink-500 inline-block" />{totalGirls} girls</span>}
                           <span className="font-semibold text-indigo-700">{totalBoys + totalGirls} total</span>
                         </div>
                       )}
@@ -816,21 +1071,21 @@ export default function OrderDetailPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div className="overflow-x-auto">
+                  {!summaryCollapsed && <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b bg-gradient-to-r from-indigo-50 to-slate-50">
                           <th className="text-left px-5 py-3 font-medium text-gray-500 text-xs">Class</th>
-                          <th className="text-center px-4 py-3 font-medium text-blue-500 text-xs">
+                          {showBoys && <th className="text-center px-4 py-3 font-medium text-blue-500 text-xs">
                             <span className="flex items-center justify-center gap-1">
                               <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Boys
                             </span>
-                          </th>
-                          <th className="text-center px-4 py-3 font-medium text-pink-500 text-xs">
+                          </th>}
+                          {showGirls && <th className="text-center px-4 py-3 font-medium text-pink-500 text-xs">
                             <span className="flex items-center justify-center gap-1">
                               <span className="w-2 h-2 rounded-full bg-pink-400 inline-block" /> Girls
                             </span>
-                          </th>
+                          </th>}
                           <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">Total</th>
                         </tr>
                       </thead>
@@ -840,7 +1095,7 @@ export default function OrderDetailPage() {
                           return (
                             <tr key={row.className} className="hover:bg-gray-50/50">
                               <td className="px-5 py-2.5 font-medium text-gray-700 text-xs">{row.className}</td>
-                              <td className="px-4 py-2 text-center">
+                              {showBoys && <td className="px-4 py-2 text-center">
                                 {classCountsEditing ? (
                                   <input
                                     type="number" min={0}
@@ -854,8 +1109,8 @@ export default function OrderDetailPage() {
                                     ? <span className="font-semibold text-blue-600">{row.boysCount}</span>
                                     : <span className="text-gray-300">—</span>
                                 )}
-                              </td>
-                              <td className="px-4 py-2 text-center">
+                              </td>}
+                              {showGirls && <td className="px-4 py-2 text-center">
                                 {classCountsEditing ? (
                                   <input
                                     type="number" min={0}
@@ -869,7 +1124,7 @@ export default function OrderDetailPage() {
                                     ? <span className="font-semibold text-pink-600">{row.girlsCount}</span>
                                     : <span className="text-gray-300">—</span>
                                 )}
-                              </td>
+                              </td>}
                               <td className="px-4 py-2.5 text-center">
                                 {rowTotal > 0
                                   ? <span className="font-bold text-indigo-700">{rowTotal}</span>
@@ -883,13 +1138,13 @@ export default function OrderDetailPage() {
                       <tfoot>
                         <tr className="bg-indigo-50 border-t-2 border-indigo-100">
                           <td className="px-5 py-2.5 font-bold text-xs text-gray-700">Total</td>
-                          <td className="px-4 py-2.5 text-center font-bold text-blue-600">{totalBoys || "—"}</td>
-                          <td className="px-4 py-2.5 text-center font-bold text-pink-600">{totalGirls || "—"}</td>
+                          {showBoys && <td className="px-4 py-2.5 text-center font-bold text-blue-600">{totalBoys || "—"}</td>}
+                          {showGirls && <td className="px-4 py-2.5 text-center font-bold text-pink-600">{totalGirls || "—"}</td>}
                           <td className="px-4 py-2.5 text-center font-bold text-indigo-700">{(totalBoys + totalGirls) || "—"}</td>
                         </tr>
                       </tfoot>
                     </table>
-                  </div>
+                  </div>}
 
                   {/* Save history — inline below the table */}
                   {countHistory.length > 0 && (

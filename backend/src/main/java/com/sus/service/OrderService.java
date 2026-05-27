@@ -412,6 +412,40 @@ public class OrderService {
             order.setRemainingAmount(newGrand.subtract(order.getAdvanceAmount()).max(BigDecimal.ZERO));
         }
 
+        // Remove items
+        if (request.getRemoveItemIds() != null && !request.getRemoveItemIds().isEmpty()) {
+            List<OrderItem> toRemove = order.getItems().stream()
+                    .filter(item -> request.getRemoveItemIds().contains(item.getId()))
+                    .collect(Collectors.toList());
+            for (OrderItem removed : toRemove) {
+                changes.add("Removed item '" + removed.getProduct().getName() + "'");
+            }
+            order.getItems().removeAll(toRemove);
+            recalcOrderTotals(order);
+        }
+
+        // Add new items
+        if (request.getNewItems() != null && !request.getNewItems().isEmpty()) {
+            for (AdminEditOrderRequest.NewOrderItemRequest ni : request.getNewItems()) {
+                Product product = productRepository.findById(ni.getProductId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Product", ni.getProductId()));
+                BigDecimal unitPrice = ni.getUnitPrice() != null ? ni.getUnitPrice() : product.getFinalPrice();
+                int qty = ni.getTotalQuantity() != null ? ni.getTotalQuantity() : 0;
+                OrderItem newItem = OrderItem.builder()
+                        .order(order)
+                        .product(product)
+                        .unitPrice(unitPrice)
+                        .notes(ni.getNotes())
+                        .totalQuantity(qty)
+                        .totalPrice(unitPrice.multiply(BigDecimal.valueOf(qty)).setScale(2, RoundingMode.HALF_UP))
+                        .build();
+                order.getItems().add(newItem);
+                changes.add("Added item '" + product.getName() + "'" +
+                        (ni.getNotes() != null && !ni.getNotes().isBlank() ? " (" + ni.getNotes() + ")" : ""));
+            }
+            recalcOrderTotals(order);
+        }
+
         if (!changes.isEmpty()) {
             adminEditRepository.save(OrderAdminEdit.builder()
                     .order(order)
@@ -421,6 +455,23 @@ public class OrderService {
         }
 
         return toSummaryDTO(orderRepository.save(order));
+    }
+
+    private void recalcOrderTotals(Order order) {
+        BigDecimal total = order.getItems().stream()
+                .map(OrderItem::getTotalPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal gst = order.getItems().stream()
+                .map(item -> item.getProduct().getBasePrice()
+                        .multiply(item.getProduct().getGstPercent())
+                        .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
+                        .multiply(BigDecimal.valueOf(item.getTotalQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal grand = total.subtract(order.getSpecialDiscount()).max(BigDecimal.ZERO);
+        order.setTotalAmount(total);
+        order.setGstAmount(gst);
+        order.setGrandTotal(grand);
+        order.setRemainingAmount(grand.subtract(order.getAdvanceAmount()).max(BigDecimal.ZERO));
     }
 
     @Transactional
