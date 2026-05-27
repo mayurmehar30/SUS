@@ -9,7 +9,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -34,9 +36,27 @@ public class FileUploadController {
 
         Path dir = Paths.get(uploadDir).toAbsolutePath();
         Files.createDirectories(dir);
-        Files.copy(file.getInputStream(), dir.resolve(filename));
+        Path saved = dir.resolve(filename);
+        Files.copy(file.getInputStream(), saved);
 
-        // Return a root-relative URL so it resolves correctly regardless of host
+        // Ensure nginx (running as a different OS user) can read the file and traverse the dir
+        try {
+            Set<PosixFilePermission> filePerms = Set.of(
+                PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE,
+                PosixFilePermission.GROUP_READ,
+                PosixFilePermission.OTHERS_READ
+            );
+            Set<PosixFilePermission> dirPerms = Set.of(
+                PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE,
+                PosixFilePermission.GROUP_READ, PosixFilePermission.GROUP_EXECUTE,
+                PosixFilePermission.OTHERS_READ, PosixFilePermission.OTHERS_EXECUTE
+            );
+            Files.setPosixFilePermissions(saved, filePerms);
+            Files.setPosixFilePermissions(dir, dirPerms);
+        } catch (UnsupportedOperationException ignored) {
+            // Windows — no POSIX permissions, skip
+        }
+
         String url = "/uploads/" + filename;
         return ResponseEntity.ok(Map.of("url", url, "filename", filename));
     }
