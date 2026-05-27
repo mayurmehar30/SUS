@@ -11,10 +11,57 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Order, OrderStatus, Product } from "@/types";
+import { Order, OrderItem, OrderStatus, Product } from "@/types";
 import { formatCurrency, formatDateTime, ORDER_STATUS_COLORS } from "@/lib/utils";
 import api from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
+
+// ── Uniform grouping helpers ──────────────────────────────────────────────────
+interface UniformGroup {
+  name: string;
+  boys: OrderItem[];
+  girls: OrderItem[];
+}
+
+function parseUniformGroups(items: OrderItem[]): UniformGroup[] {
+  const map = new Map<string, { boys: OrderItem[]; girls: OrderItem[] }>();
+  for (const item of items) {
+    const notes = item.notes ?? "";
+    const boysMatch = notes.match(/^(.+?)\s*-\s*Boys$/i);
+    const girlsMatch = notes.match(/^(.+?)\s*-\s*Girls$/i);
+    if (boysMatch) {
+      const name = boysMatch[1].trim();
+      if (!map.has(name)) map.set(name, { boys: [], girls: [] });
+      map.get(name)!.boys.push(item);
+    } else if (girlsMatch) {
+      const name = girlsMatch[1].trim();
+      if (!map.has(name)) map.set(name, { boys: [], girls: [] });
+      map.get(name)!.girls.push(item);
+    } else {
+      const name = notes.trim() || "Other";
+      if (!map.has(name)) map.set(name, { boys: [], girls: [] });
+      map.get(name)!.boys.push(item);
+    }
+  }
+  return Array.from(map.entries()).map(([name, { boys, girls }]) => ({ name, boys, girls }));
+}
+
+interface ClassSummaryRow { className: string; boys: number; girls: number; total: number; }
+
+function deriveClassSummary(items: OrderItem[]): ClassSummaryRow[] {
+  const map = new Map<string, { boys: number; girls: number }>();
+  for (const item of items) {
+    for (const c of item.classStudentCounts ?? []) {
+      if (!map.has(c.className)) map.set(c.className, { boys: 0, girls: 0 });
+      const entry = map.get(c.className)!;
+      if (c.boysCount > entry.boys) entry.boys = c.boysCount;
+      if (c.girlsCount > entry.girls) entry.girls = c.girlsCount;
+    }
+  }
+  return Array.from(map.entries()).map(([className, { boys, girls }]) => ({
+    className, boys, girls, total: boys + girls,
+  }));
+}
 
 // ── Count history types & modal ───────────────────────────────────────────────
 interface CountEntry { className: string; boysCount: number; girlsCount: number; }
@@ -327,92 +374,77 @@ export default function OrderDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Order items */}
-          <Card>
-            <CardHeader><CardTitle>Order Items</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              {order.items?.map((item, itemIdx) => {
-                const editItem = editMode && editState ? editState.items[itemIdx] : null;
-                return (
-                  <div key={item.id} className="border rounded-lg overflow-hidden">
-                    <div className="flex items-start justify-between px-4 py-3 bg-gray-50 gap-3">
-                      <div className="flex-1 min-w-0">
-                        {editItem ? (
-                          <>
-                            {changingProductIdx === itemIdx ? (
-                              <div className="flex items-center gap-2">
-                                <select
-                                  className="flex-1 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
-                                  disabled={alternativesLoading}
-                                  value={editItem.newProductId ?? item.productId}
-                                  onChange={e => {
-                                    const pid = parseInt(e.target.value);
-                                    const prod = alternativeProducts?.find(p => p.id === pid);
-                                    setEditState(prev => {
-                                      if (!prev) return prev;
-                                      const items = [...prev.items];
-                                      items[itemIdx] = {
-                                        ...items[itemIdx],
-                                        newProductId: pid,
-                                        newProductName: prod?.name,
-                                        unitPrice: String(Math.round(prod?.finalPrice ?? parseFloat(items[itemIdx].unitPrice))),
-                                      };
-                                      return { ...prev, items };
-                                    });
-                                  }}
-                                >
-                                  {alternativesLoading
-                                    ? <option>Loading products...</option>
-                                    : alternativeProducts?.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                      ))
-                                  }
-                                </select>
-                                <button
-                                  type="button"
-                                  className="text-xs text-gray-400 hover:text-gray-600"
-                                  onClick={() => setChangingProductIdx(null)}
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium text-sm truncate">
-                                  {editItem.newProductName ?? item.productName}
-                                </p>
-                                <button
-                                  type="button"
-                                  className="text-xs text-indigo-500 hover:text-indigo-700 shrink-0"
-                                  onClick={() => setChangingProductIdx(itemIdx)}
-                                >
-                                  Change
-                                </button>
-                              </div>
-                            )}
-                            {(item.categoryName || item.subCategoryName) && (
-                              <p className="text-xs text-indigo-500 mt-0.5">
-                                {item.categoryName}
-                                {item.subCategoryName && <span className="text-gray-400"> › {item.subCategoryName}</span>}
-                                <span className="text-gray-400"> (alternatives shown)</span>
+          {/* Order items — edit mode: flat list with inline editors */}
+          {editMode && editState && (
+            <Card>
+              <CardHeader><CardTitle>Order Items</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                {order.items?.map((item, itemIdx) => {
+                  const editItem = editState.items[itemIdx];
+                  return (
+                    <div key={item.id} className="border rounded-lg overflow-hidden">
+                      <div className="flex items-start justify-between px-4 py-3 bg-gray-50 gap-3">
+                        <div className="flex-1 min-w-0">
+                          {changingProductIdx === itemIdx ? (
+                            <div className="flex items-center gap-2">
+                              <select
+                                className="flex-1 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
+                                disabled={alternativesLoading}
+                                value={editItem.newProductId ?? item.productId}
+                                onChange={e => {
+                                  const pid = parseInt(e.target.value);
+                                  const prod = alternativeProducts?.find(p => p.id === pid);
+                                  setEditState(prev => {
+                                    if (!prev) return prev;
+                                    const items = [...prev.items];
+                                    items[itemIdx] = {
+                                      ...items[itemIdx],
+                                      newProductId: pid,
+                                      newProductName: prod?.name,
+                                      unitPrice: String(Math.round(prod?.finalPrice ?? parseFloat(items[itemIdx].unitPrice))),
+                                    };
+                                    return { ...prev, items };
+                                  });
+                                }}
+                              >
+                                {alternativesLoading
+                                  ? <option>Loading products...</option>
+                                  : alternativeProducts?.map(p => (
+                                      <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))
+                                }
+                              </select>
+                              <button
+                                type="button"
+                                className="text-xs text-gray-400 hover:text-gray-600"
+                                onClick={() => setChangingProductIdx(null)}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-sm truncate">
+                                {editItem.newProductName ?? item.productName}
                               </p>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <p className="font-medium">{item.productName}</p>
-                            {(item.categoryName || item.subCategoryName) && (
-                              <p className="text-xs text-indigo-500 mt-0.5">
-                                {item.categoryName}
-                                {item.subCategoryName && <span className="text-gray-400"> › {item.subCategoryName}</span>}
-                              </p>
-                            )}
-                            {item.productSku && <p className="text-xs text-gray-400 font-mono">{item.productSku}</p>}
-                          </>
-                        )}
-                      </div>
-                      <div className="text-right shrink-0">
-                        {editItem ? (
+                              <button
+                                type="button"
+                                className="text-xs text-indigo-500 hover:text-indigo-700 shrink-0"
+                                onClick={() => setChangingProductIdx(itemIdx)}
+                              >
+                                Change
+                              </button>
+                            </div>
+                          )}
+                          {(item.categoryName || item.subCategoryName) && (
+                            <p className="text-xs text-indigo-500 mt-0.5">
+                              {item.categoryName}
+                              {item.subCategoryName && <span className="text-gray-400"> › {item.subCategoryName}</span>}
+                              <span className="text-gray-400"> (alternatives shown)</span>
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0">
                           <div className="flex items-center gap-2 justify-end">
                             <span className="text-xs text-gray-500">₹</span>
                             <Input
@@ -424,72 +456,196 @@ export default function OrderDetailPage() {
                               onChange={e => updateItemField(itemIdx, "unitPrice", e.target.value)}
                             />
                           </div>
-                        ) : (
-                          <>
-                            <p className="font-semibold">{formatCurrency(item.totalPrice)}</p>
-                            <p className="text-xs text-gray-400">{item.totalQuantity} pcs @ {formatCurrency(item.unitPrice)}</p>
-                          </>
+                        </div>
+                      </div>
+
+                      {editItem.classStudentCounts.length > 0 && (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b text-gray-500">
+                                <th className="text-left px-4 py-2">Class</th>
+                                <th className="text-center px-4 py-2">Boys</th>
+                                <th className="text-center px-4 py-2">Girls</th>
+                                <th className="text-center px-4 py-2">Total</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {editItem.classStudentCounts.map((ec, ci) => (
+                                <tr key={ec.className} className="border-b last:border-0">
+                                  <td className="px-4 py-2 font-medium">{ec.className}</td>
+                                  <td className="px-4 py-2 text-center">
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      className="w-16 h-6 text-center text-xs mx-auto"
+                                      value={ec.boysCount}
+                                      onChange={e => updateCount(itemIdx, ci, "boysCount", parseInt(e.target.value) || 0)}
+                                    />
+                                  </td>
+                                  <td className="px-4 py-2 text-center">
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      className="w-16 h-6 text-center text-xs mx-auto"
+                                      value={ec.girlsCount}
+                                      onChange={e => updateCount(itemIdx, ci, "girlsCount", parseInt(e.target.value) || 0)}
+                                    />
+                                  </td>
+                                  <td className="px-4 py-2 text-center font-semibold">
+                                    {ec.boysCount + ec.girlsCount}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Order items — view mode: grouped by uniform name → boys / girls */}
+          {!editMode && (() => {
+            const groups = parseUniformGroups(order.items ?? []);
+            return (
+              <Card>
+                <CardHeader><CardTitle>Uniform List</CardTitle></CardHeader>
+                <CardContent className="space-y-5">
+                  {groups.map((group, idx) => (
+                    <div key={group.name}>
+                      {/* Uniform header */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                          {idx + 1}
+                        </div>
+                        <h3 className="font-semibold text-gray-800">{group.name}</h3>
+                      </div>
+
+                      <div className="pl-8 space-y-2">
+                        {/* Boys */}
+                        {group.boys.length > 0 && (
+                          <div className="rounded-lg border border-blue-100 overflow-hidden">
+                            <div className="px-4 py-2 bg-blue-50">
+                              <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Boys</span>
+                            </div>
+                            <div className="divide-y divide-gray-50">
+                              {group.boys.map(item => (
+                                <div key={item.id} className="flex items-center justify-between px-4 py-2.5">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium text-gray-800 truncate">{item.productName}</p>
+                                    {item.productSku && <p className="text-xs text-gray-400 font-mono">{item.productSku}</p>}
+                                  </div>
+                                  <div className="text-right flex-shrink-0 ml-3">
+                                    <p className="text-sm font-semibold text-gray-900">{formatCurrency(item.unitPrice)}</p>
+                                    <p className="text-xs text-gray-400">per student</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Girls */}
+                        {group.girls.length > 0 && (
+                          <div className="rounded-lg border border-pink-100 overflow-hidden">
+                            <div className="px-4 py-2 bg-pink-50">
+                              <span className="text-xs font-semibold text-pink-700 uppercase tracking-wide">Girls</span>
+                            </div>
+                            <div className="divide-y divide-gray-50">
+                              {group.girls.map(item => (
+                                <div key={item.id} className="flex items-center justify-between px-4 py-2.5">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium text-gray-800 truncate">{item.productName}</p>
+                                    {item.productSku && <p className="text-xs text-gray-400 font-mono">{item.productSku}</p>}
+                                  </div>
+                                  <div className="text-right flex-shrink-0 ml-3">
+                                    <p className="text-sm font-semibold text-gray-900">{formatCurrency(item.unitPrice)}</p>
+                                    <p className="text-xs text-gray-400">per student</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         )}
                       </div>
-                    </div>
 
-                    {(editItem ? editItem.classStudentCounts : item.classStudentCounts)?.length > 0 && (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b text-gray-500">
-                              <th className="text-left px-4 py-2">Class</th>
-                              <th className="text-center px-4 py-2">Boys</th>
-                              <th className="text-center px-4 py-2">Girls</th>
-                              <th className="text-center px-4 py-2">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {editItem
-                              ? editItem.classStudentCounts.map((ec, ci) => (
-                                  <tr key={ec.className} className="border-b last:border-0">
-                                    <td className="px-4 py-2 font-medium">{ec.className}</td>
-                                    <td className="px-4 py-2 text-center">
-                                      <Input
-                                        type="number"
-                                        min={0}
-                                        className="w-16 h-6 text-center text-xs mx-auto"
-                                        value={ec.boysCount}
-                                        onChange={e => updateCount(itemIdx, ci, "boysCount", parseInt(e.target.value) || 0)}
-                                      />
-                                    </td>
-                                    <td className="px-4 py-2 text-center">
-                                      <Input
-                                        type="number"
-                                        min={0}
-                                        className="w-16 h-6 text-center text-xs mx-auto"
-                                        value={ec.girlsCount}
-                                        onChange={e => updateCount(itemIdx, ci, "girlsCount", parseInt(e.target.value) || 0)}
-                                      />
-                                    </td>
-                                    <td className="px-4 py-2 text-center font-semibold">
-                                      {ec.boysCount + ec.girlsCount}
-                                    </td>
-                                  </tr>
-                                ))
-                              : item.classStudentCounts.map((c, ci) => (
-                                  <tr key={ci} className="border-b last:border-0">
-                                    <td className="px-4 py-2 font-medium">{c.className}</td>
-                                    <td className="px-4 py-2 text-center">{c.boysCount}</td>
-                                    <td className="px-4 py-2 text-center">{c.girlsCount}</td>
-                                    <td className="px-4 py-2 text-center font-semibold">{c.totalCount}</td>
-                                  </tr>
-                                ))
-                            }
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                      {idx < groups.length - 1 && <div className="mt-5 border-t border-dashed border-gray-100" />}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* Class-wise summary — view mode only */}
+          {!editMode && (() => {
+            const summary = deriveClassSummary(order.items ?? []);
+            if (summary.length === 0) return null;
+            const totalBoys = summary.reduce((s, r) => s + r.boys, 0);
+            const totalGirls = summary.reduce((s, r) => s + r.girls, 0);
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between flex-wrap gap-2">
+                    <span>Class-wise Summary</span>
+                    <div className="flex items-center gap-3 text-sm font-normal text-gray-500">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
+                        {totalBoys} boys
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-pink-500 inline-block" />
+                        {totalGirls} girls
+                      </span>
+                      <span className="font-semibold text-indigo-700">{totalBoys + totalGirls} total</span>
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-gray-50">
+                          <th className="text-left px-5 py-3 font-medium text-gray-500 text-xs">Class</th>
+                          <th className="text-center px-4 py-3 font-medium text-blue-500 text-xs">Boys</th>
+                          <th className="text-center px-4 py-3 font-medium text-pink-500 text-xs">Girls</th>
+                          <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {summary.map(row => (
+                          <tr key={row.className} className="hover:bg-gray-50/50">
+                            <td className="px-5 py-2.5 font-medium text-gray-700">{row.className}</td>
+                            <td className="px-4 py-2.5 text-center">
+                              {row.boys > 0 ? <span className="font-semibold text-blue-600">{row.boys}</span> : <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="px-4 py-2.5 text-center">
+                              {row.girls > 0 ? <span className="font-semibold text-pink-600">{row.girls}</span> : <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="px-4 py-2.5 text-center">
+                              {row.total > 0 ? <span className="font-bold text-indigo-700">{row.total}</span> : <span className="text-gray-300">—</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-indigo-50 border-t-2 border-indigo-100">
+                          <td className="px-5 py-2.5 font-bold text-xs text-gray-700">Total</td>
+                          <td className="px-4 py-2.5 text-center font-bold text-blue-600">{totalBoys || "—"}</td>
+                          <td className="px-4 py-2.5 text-center font-bold text-pink-600">{totalGirls || "—"}</td>
+                          <td className="px-4 py-2.5 text-center font-bold text-indigo-700">{(totalBoys + totalGirls) || "—"}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
                   </div>
-                );
-              })}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Admin edit history */}
           {isSuperAdmin && order.adminEdits && order.adminEdits.length > 0 && (
