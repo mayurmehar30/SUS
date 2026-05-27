@@ -46,19 +46,6 @@ function parseUniformGroups(items: OrderItem[]): UniformGroup[] {
   return Array.from(map.entries()).map(([name, { boys, girls }]) => ({ name, boys, girls }));
 }
 
-interface ClassSummaryRow { className: string; boys: number; girls: number; total: number; }
-
-function classSummaryFromHistory(countsJson: string): ClassSummaryRow[] {
-  const counts: Array<{ className: string; boysCount: number; girlsCount: number }> =
-    JSON.parse(countsJson);
-  return counts.map(c => ({
-    className: c.className,
-    boys: c.boysCount,
-    girls: c.girlsCount,
-    total: c.boysCount + c.girlsCount,
-  }));
-}
-
 // ── Image lightbox ────────────────────────────────────────────────────────────
 function ImageLightbox({ images, initialIndex, productName, onClose }: {
   images: string[];
@@ -218,6 +205,7 @@ type EditItemState = {
   notes: string;
   newProductId?: number;
   newProductName?: string;
+  newProductImages?: string[];
   classStudentCounts: Array<{
     id?: number;
     className: string;
@@ -286,6 +274,11 @@ export default function OrderDetailPage() {
   const [selectedHistory, setSelectedHistory] = useState<HistoryItem | null>(null);
   const [lightbox, setLightbox] = useState<{ images: string[]; idx: number; name: string } | null>(null);
 
+  // Class-wise summary inline editing
+  type CountRow = { className: string; boysCount: number; girlsCount: number };
+  const [classCountsEditing, setClassCountsEditing] = useState(false);
+  const [classCountsEditRows, setClassCountsEditRows] = useState<CountRow[]>([]);
+
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: ["order", id],
     queryFn: () => api.get(`/orders/${id}`).then(r => r.data),
@@ -321,6 +314,20 @@ export default function OrderDetailPage() {
       toast.success("Order updated");
     },
     onError: () => toast.error("Failed to save changes"),
+  });
+
+  const saveCountsMutation = useMutation({
+    mutationFn: (rows: Array<{ className: string; boysCount: number; girlsCount: number }>) =>
+      api.put(`/orders/public/${order?.orderToken}/counts`, {
+        counts: rows,
+        savedBy: user?.name || undefined,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["count-history-admin", id] });
+      setClassCountsEditing(false);
+      toast.success("Student counts saved");
+    },
+    onError: () => toast.error("Failed to save counts"),
   });
 
   function startEdit() {
@@ -506,7 +513,9 @@ export default function OrderDetailPage() {
                                 {genderItems.map(item => {
                                   const itemIdx = order.items.findIndex(i => i.id === item.id);
                                   const editItem = editState.items[itemIdx];
-                                  const imgs = item.productImages ?? (item.productImageUrl ? [item.productImageUrl] : []);
+                                  const imgs = editItem.newProductImages !== undefined
+                                    ? editItem.newProductImages
+                                    : (item.productImages ?? (item.productImageUrl ? [item.productImageUrl] : []));
                                   return (
                                     <div key={item.id} className="flex items-center gap-3 px-4 py-2.5">
                                       {/* Thumbnail */}
@@ -545,6 +554,7 @@ export default function OrderDetailPage() {
                                                     ...its[itemIdx],
                                                     newProductId: pid,
                                                     newProductName: prod?.name,
+                                                    newProductImages: prod?.images?.map(img => img.imageUrl) ?? [],
                                                     unitPrice: String(Math.round(prod?.finalPrice ?? parseFloat(its[itemIdx].unitPrice))),
                                                   };
                                                   return { ...prev, items: its };
@@ -741,29 +751,67 @@ export default function OrderDetailPage() {
             );
           })()}
 
-          {/* Class-wise summary — view mode only, sourced from latest count history */}
-          {!editMode && (() => {
-            const summary = countHistory.length > 0
-              ? classSummaryFromHistory(countHistory[0].countsJson)
-              : [];
-            if (summary.length === 0) return null;
-            const totalBoys = summary.reduce((s, r) => s + r.boys, 0);
-            const totalGirls = summary.reduce((s, r) => s + r.girls, 0);
+          {/* Class-wise Summary — editable, merged with count history */}
+          {(() => {
+            const latestRows: Array<{ className: string; boysCount: number; girlsCount: number }> =
+              countHistory.length > 0
+                ? JSON.parse(countHistory[0].countsJson)
+                : (order.school.classNames ?? []).map(cn => ({ className: cn, boysCount: 0, girlsCount: 0 }));
+            if (latestRows.length === 0) return null;
+
+            const displayRows = classCountsEditing ? classCountsEditRows : latestRows;
+            const totalBoys   = displayRows.reduce((s, r) => s + r.boysCount, 0);
+            const totalGirls  = displayRows.reduce((s, r) => s + r.girlsCount, 0);
+            const editTotal   = classCountsEditing ? classCountsEditRows.reduce((s, r) => s + r.boysCount + r.girlsCount, 0) : 0;
+
             return (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between flex-wrap gap-2">
                     <span>Class-wise Summary</span>
-                    <div className="flex items-center gap-3 text-sm font-normal text-gray-500">
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
-                        {totalBoys} boys
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-pink-500 inline-block" />
-                        {totalGirls} girls
-                      </span>
-                      <span className="font-semibold text-indigo-700">{totalBoys + totalGirls} total</span>
+                    <div className="flex items-center gap-2">
+                      {!classCountsEditing && (
+                        <div className="flex items-center gap-3 text-xs font-normal text-gray-500 mr-1">
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />{totalBoys} boys
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-pink-500 inline-block" />{totalGirls} girls
+                          </span>
+                          <span className="font-semibold text-indigo-700">{totalBoys + totalGirls} total</span>
+                        </div>
+                      )}
+                      {classCountsEditing ? (
+                        <>
+                          <button
+                            onClick={() => setClassCountsEditing(false)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                          >
+                            <X className="h-3 w-3" /> Cancel
+                          </button>
+                          <button
+                            onClick={() => saveCountsMutation.mutate(classCountsEditRows)}
+                            disabled={saveCountsMutation.isPending || editTotal === 0}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                              editTotal === 0
+                                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                            }`}
+                          >
+                            <Save className="h-3 w-3" /> Save Counts
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setClassCountsEditRows(latestRows.map(r => ({ ...r })));
+                            setClassCountsEditing(true);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 transition-colors"
+                        >
+                          <Pencil className="h-3 w-3" /> {totalBoys + totalGirls > 0 ? "Edit" : "Add Counts"}
+                        </button>
+                      )}
                     </div>
                   </CardTitle>
                 </CardHeader>
@@ -771,28 +819,66 @@ export default function OrderDetailPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b bg-gray-50">
+                        <tr className="border-b bg-gradient-to-r from-indigo-50 to-slate-50">
                           <th className="text-left px-5 py-3 font-medium text-gray-500 text-xs">Class</th>
-                          <th className="text-center px-4 py-3 font-medium text-blue-500 text-xs">Boys</th>
-                          <th className="text-center px-4 py-3 font-medium text-pink-500 text-xs">Girls</th>
+                          <th className="text-center px-4 py-3 font-medium text-blue-500 text-xs">
+                            <span className="flex items-center justify-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Boys
+                            </span>
+                          </th>
+                          <th className="text-center px-4 py-3 font-medium text-pink-500 text-xs">
+                            <span className="flex items-center justify-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-pink-400 inline-block" /> Girls
+                            </span>
+                          </th>
                           <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">Total</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {summary.map(row => (
-                          <tr key={row.className} className="hover:bg-gray-50/50">
-                            <td className="px-5 py-2.5 font-medium text-gray-700">{row.className}</td>
-                            <td className="px-4 py-2.5 text-center">
-                              {row.boys > 0 ? <span className="font-semibold text-blue-600">{row.boys}</span> : <span className="text-gray-300">—</span>}
-                            </td>
-                            <td className="px-4 py-2.5 text-center">
-                              {row.girls > 0 ? <span className="font-semibold text-pink-600">{row.girls}</span> : <span className="text-gray-300">—</span>}
-                            </td>
-                            <td className="px-4 py-2.5 text-center">
-                              {row.total > 0 ? <span className="font-bold text-indigo-700">{row.total}</span> : <span className="text-gray-300">—</span>}
-                            </td>
-                          </tr>
-                        ))}
+                        {displayRows.map((row, idx) => {
+                          const rowTotal = row.boysCount + row.girlsCount;
+                          return (
+                            <tr key={row.className} className="hover:bg-gray-50/50">
+                              <td className="px-5 py-2.5 font-medium text-gray-700 text-xs">{row.className}</td>
+                              <td className="px-4 py-2 text-center">
+                                {classCountsEditing ? (
+                                  <input
+                                    type="number" min={0}
+                                    value={classCountsEditRows[idx]?.boysCount || ""}
+                                    placeholder="0"
+                                    onChange={e => setClassCountsEditRows(prev => prev.map((r, i) => i === idx ? { ...r, boysCount: parseInt(e.target.value) || 0 } : r))}
+                                    className="w-full text-center text-sm border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 border-gray-200 focus:ring-indigo-300 focus:border-indigo-400"
+                                  />
+                                ) : (
+                                  row.boysCount > 0
+                                    ? <span className="font-semibold text-blue-600">{row.boysCount}</span>
+                                    : <span className="text-gray-300">—</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                {classCountsEditing ? (
+                                  <input
+                                    type="number" min={0}
+                                    value={classCountsEditRows[idx]?.girlsCount || ""}
+                                    placeholder="0"
+                                    onChange={e => setClassCountsEditRows(prev => prev.map((r, i) => i === idx ? { ...r, girlsCount: parseInt(e.target.value) || 0 } : r))}
+                                    className="w-full text-center text-sm border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 border-gray-200 focus:ring-indigo-300 focus:border-indigo-400"
+                                  />
+                                ) : (
+                                  row.girlsCount > 0
+                                    ? <span className="font-semibold text-pink-600">{row.girlsCount}</span>
+                                    : <span className="text-gray-300">—</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-center">
+                                {rowTotal > 0
+                                  ? <span className="font-bold text-indigo-700">{rowTotal}</span>
+                                  : <span className="text-gray-300">—</span>
+                                }
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                       <tfoot>
                         <tr className="bg-indigo-50 border-t-2 border-indigo-100">
@@ -804,6 +890,50 @@ export default function OrderDetailPage() {
                       </tfoot>
                     </table>
                   </div>
+
+                  {/* Save history — inline below the table */}
+                  {countHistory.length > 0 && (
+                    <>
+                      <div className="border-t border-gray-100 px-5 py-2 flex items-center gap-2 bg-gray-50/50">
+                        <History className="h-3.5 w-3.5 text-indigo-400" />
+                        <span className="text-xs font-semibold text-gray-600">Save History</span>
+                        <span className="ml-auto text-xs text-gray-400">
+                          {countHistory.length} save{countHistory.length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                      <div className="divide-y divide-gray-50">
+                        {countHistory.map(h => {
+                          const counts: CountEntry[] = JSON.parse(h.countsJson);
+                          const boys  = counts.reduce((s, c) => s + c.boysCount, 0);
+                          const girls = counts.reduce((s, c) => s + c.girlsCount, 0);
+                          const date  = new Date(h.savedAt);
+                          const dateStr = date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+                          const timeStr = date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+                          return (
+                            <button
+                              key={h.id}
+                              onClick={() => setSelectedHistory(h)}
+                              className="w-full px-5 py-3 flex items-center justify-between hover:bg-indigo-50/50 transition-colors text-left group"
+                            >
+                              <div>
+                                <p className="text-xs font-semibold text-gray-700 group-hover:text-indigo-700 transition-colors">
+                                  {dateStr} · {timeStr}
+                                </p>
+                                <p className="text-xs text-gray-400 mt-0.5">
+                                  {h.savedBy && <span className="text-indigo-500 font-medium">{h.savedBy} · </span>}
+                                  {boys} boys · {girls} girls
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <span className="text-sm font-bold text-indigo-600">{boys + girls} students</span>
+                                <ChevronRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-indigo-400 transition-colors" />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             );
@@ -828,51 +958,6 @@ export default function OrderDetailPage() {
                       <p className="text-xs text-gray-600 mt-0.5">{edit.summary}</p>
                     </div>
                   ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Student count history */}
-          {countHistory.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <History className="h-4 w-4 text-indigo-500" /> Student Count History
-                  <span className="ml-auto text-xs font-normal text-gray-400">{countHistory.length} save{countHistory.length !== 1 ? "s" : ""}</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="divide-y divide-gray-50">
-                  {countHistory.map(h => {
-                    const counts: CountEntry[] = JSON.parse(h.countsJson);
-                    const boys  = counts.reduce((s, c) => s + c.boysCount, 0);
-                    const girls = counts.reduce((s, c) => s + c.girlsCount, 0);
-                    const date  = new Date(h.savedAt);
-                    const dateStr = date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-                    const timeStr = date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
-                    return (
-                      <button
-                        key={h.id}
-                        onClick={() => setSelectedHistory(h)}
-                        className="w-full px-5 py-3 flex items-center justify-between hover:bg-indigo-50/50 transition-colors text-left group"
-                      >
-                        <div>
-                          <p className="text-xs font-semibold text-gray-700 group-hover:text-indigo-700 transition-colors">
-                            {dateStr} · {timeStr}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {h.savedBy && <span className="text-indigo-500 font-medium">{h.savedBy} · </span>}
-                            {boys} boys · {girls} girls
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="text-sm font-bold text-indigo-600">{boys + girls} students</span>
-                          <ChevronRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-indigo-400 transition-colors" />
-                        </div>
-                      </button>
-                    );
-                  })}
                 </div>
               </CardContent>
             </Card>
