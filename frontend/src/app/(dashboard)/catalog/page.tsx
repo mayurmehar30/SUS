@@ -52,6 +52,7 @@ export default function CatalogPage() {
     queryKey: ["products", search, categoryFilter, subCategoryFilter, statusFilter],
     queryFn: () => api.get("/products", {
       params: {
+        size: 500,
         search: search || undefined,
         categoryId: categoryFilter !== "all" ? categoryFilter : undefined,
         subCategoryId: subCategoryFilter !== "all" ? subCategoryFilter : undefined,
