@@ -97,7 +97,12 @@ export default function OrdersPage() {
                       </span>
                     </td>
                     <td className="px-5 py-3.5">
-                      <span className="text-xs font-semibold text-gray-800">{order.school?.name}</span>
+                      <button
+                        onClick={() => router.push(`/schools/${order.school?.id}`)}
+                        className="text-xs font-semibold text-gray-800 hover:text-indigo-700 hover:underline text-left"
+                      >
+                        {order.school?.name}
+                      </button>
                     </td>
                     <td className="px-5 py-3.5 text-xs text-gray-400 hidden md:table-cell">{formatDate(order.createdAt)}</td>
                     <td className="px-5 py-3.5 hidden lg:table-cell">
